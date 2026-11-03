@@ -4,7 +4,8 @@
 
 - Root SSH to 178.104.48.140 for the operator's key.
 - Cloudflare DNS-only A records `*.vpn`, `id.vpn`, `api.vpn` → 178.104.48.140 (done 2026-11-03).
-- PostgreSQL superuser password (Coolify UI), used once to create `malgary_provisioner`.
+- `malgary_provisioner` login created by the owner, password in
+  `/opt/malgary/secrets/provisioner-password` (done 2026-11-04).
 - Grafana Cloud stack (free) for metrics and alerts (optional during development).
 - No Hetzner Cloud Firewall is attached, so no port opening is needed (owner, 2026-11-03).
 - Deferred until before real users: Hetzner Object Storage bucket + keys and owners' `age` key
@@ -14,8 +15,8 @@
 
 1. `bin/run interim-check.yml` — read-only: Coolify proxy entrypoint and resolver names, Docker
    cleanup settings, free memory. Writes `interim-facts.yml`.
-2. `bin/run interim-site.yml` — creates `/opt/malgary`, the `malgary-gw` network, the provisioner
-   role (operator enters the superuser password once), Zitadel, malgaryd and (if configured)
+2. `bin/run interim-site.yml` — creates `/opt/malgary`, the `malgary-gw` network, checks the
+   provisioner login, Zitadel, malgaryd and (if configured)
    Alloy containers. Snapshot of the host's iptables/nftables before and after (V3).
 3. `malgaryctl plan apply -f deploy/plans/ent-onedge.yaml` (and `ent-testco`, `internal-ops`).
 4. `malgaryctl tenant apply -f deploy/tenants/testco.yaml` → wait for `active`.

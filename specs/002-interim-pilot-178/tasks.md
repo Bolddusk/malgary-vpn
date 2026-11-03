@@ -170,9 +170,10 @@ and a test user connects from the setup page.
   safe, every task `changed_when: false`).
 - [ ] T029 [US1] Role `infra/ansible/roles/interim_base/`: `/opt/malgary/{stacks,specs,secrets}`
   (0750, secrets 0700), Docker network `malgary-gw` (bridge, `10.250.0.0/24`,
-  `com.docker.network.bridge.enable_icc=false`), and the `malgary_provisioner` role
-  (`CREATEDB CREATEROLE`, no superuser) created once with the superuser password prompted at run
-  time (`vars_prompt`, `no_log`) and never written to disk.
+  `com.docker.network.bridge.enable_icc=false`), and a check that the `malgary_provisioner` login
+  (created by the owner, 2026-11-04) connects over TCP with the password in
+  `/opt/malgary/secrets/provisioner-password` (0600). Malgary never needs the superuser
+  password.
 - [ ] T030 [US1] Role `infra/ansible/roles/interim_zitadel/`: compose project `malgary-id` with
   Zitadel v4.20 and the login app on the `coolify` network, Traefik labels for
   `id.vpn.malgary.com`, memory 768 MB + 256 MB, database `zitadel` created by the provisioner,
@@ -190,8 +191,8 @@ and a test user connects from the setup page.
 - [ ] T033 🖥 [US1] Run `interim-check.yml` on 178 and update [research.md](research.md) with any
   fact that differs (owner go-ahead).
 - [ ] T034 🖥 [US1] Run `interim-site.yml`, apply the plans and the `testco` tenant, and walk
-  quickstart V1, V2 and V9a with one test user (owner go-ahead; needs the Postgres superuser
-  password and the Google OAuth client).
+  quickstart V1, V2 and V9a with one test user (owner go-ahead; needs the Google OAuth
+  client).
 
 **Checkpoint**: one tenant stack runs on 178 and a test user connects (after US3's gate passes).
 

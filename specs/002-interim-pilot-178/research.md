@@ -52,8 +52,9 @@ database + role per tenant.
 - Zitadel supports PostgreSQL 14–18 (001 research R4); NetBird's postgres store works on 18.
 - `citext` ships with the official image; `CREATE EXTENSION citext` runs as the `malgary`
   database owner (allowed for trusted extensions on 13+). **Verify** in the first task.
-- The superuser password (from Coolify's UI) is used once, by the operator, to create the
-  provisioner role. It is never stored by Malgary.
+- The owner created the provisioner login in Coolify's terminal and stored its password at
+  `/opt/malgary/secrets/provisioner-password` (0600), checked over TCP on 2026-11-04. Malgary
+  never sees the superuser password.
 
 **Risk accepted**: the database server is shared with the event app; a database restart affects
 both. NetBird stacks and malgaryd reconnect automatically.
