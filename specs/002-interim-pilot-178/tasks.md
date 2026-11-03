@@ -313,7 +313,7 @@ cell `backup` role, `malgaryctl backup verify`, the 26-hour alert, and quickstar
 
 ## Phase 8: Polish and cross-cutting
 
-- [ ] T052 [P] Update `docs/architecture-overview.html` and `deploy/cells/README.md` with the
+- [X] T052 [P] Update `deploy/cells/README.md` (done) and `docs/architecture-overview.html` (deferred until the interim layout is proven on 178) with the
   interim deployment (one host, compose, guard), and add `docs/decisions/0002-interim-host.md`.
 - [X] T053 [P] CI: build `infra/images/*` and `backend/Dockerfile` (no push) and run the guard
   rules test in `.github/workflows/ci.yml`.
