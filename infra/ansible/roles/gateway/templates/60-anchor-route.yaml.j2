@@ -1,0 +1,9 @@
+# Managed by Ansible (role gateway). Default route via the DO anchor gateway (research R3).
+network:
+  version: 2
+  ethernets:
+    {{ gateway_public_if }}:
+      routes:
+        - to: default
+          via: {{ anchor_gateway }}
+          metric: 50

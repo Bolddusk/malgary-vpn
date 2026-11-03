@@ -1,0 +1,17 @@
+[Unit]
+Description=Malgary backend (system of record, API, reconciler)
+After=network-online.target postgresql.service
+Wants=network-online.target
+
+[Service]
+User=malgary
+EnvironmentFile=/etc/malgary/malgaryd.env
+ExecStart=/usr/local/bin/malgaryd
+Restart=on-failure
+# sudo for the deploy wrapper needs privilege escalation, so NoNewPrivileges stays off.
+ProtectSystem=full
+ReadWritePaths=/opt/malgary/specs /etc/malgary/secrets
+PrivateTmp=true
+
+[Install]
+WantedBy=multi-user.target

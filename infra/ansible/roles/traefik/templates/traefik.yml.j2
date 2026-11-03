@@ -1,0 +1,37 @@
+# Managed by Ansible (role traefik).
+entryPoints:
+  web:
+    address: ":80"
+    http:
+      redirections:
+        entryPoint: {to: websecure, scheme: https}
+  websecure:
+    address: ":443"
+    transport:
+      respondingTimeouts:
+        readTimeout: 0   # NetBird gRPC streams are long-lived
+  metrics:
+    address: "{{ private_ipv4 }}:8082"
+
+certificatesResolvers:
+  le:
+    acme:
+      email: "{{ traefik_acme_email }}"
+      storage: /acme/acme.json
+      httpChallenge: {entryPoint: web}
+
+providers:
+  file:
+    directory: /dynamic
+    watch: true
+
+metrics:
+  prometheus: {entryPoint: metrics}
+
+# Access logs keep no bodies and no query strings (FR-027).
+accessLog:
+  format: json
+  fields:
+    defaultMode: keep
+    names: {RequestQuery: drop}
+    headers: {defaultMode: drop}

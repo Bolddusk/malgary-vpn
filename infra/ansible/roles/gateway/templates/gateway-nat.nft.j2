@@ -1,0 +1,22 @@
+# Managed by Ansible (role gateway). Every tenant routing peer (wt-*) leaves through the host's
+# default route, i.e. the reserved IP.
+table ip malgary_nat
+delete table ip malgary_nat
+
+table ip malgary_nat {
+  chain postrouting {
+    type nat hook postrouting priority srcnat; policy accept;
+    iifname "wt-*" oifname "{{ gateway_public_if }}" masquerade
+  }
+}
+
+table inet malgary_mss
+delete table inet malgary_mss
+
+table inet malgary_mss {
+  chain forward {
+    type filter hook forward priority mangle; policy accept;
+    iifname "wt-*" tcp flags syn tcp option maxseg size set rt mtu
+    oifname "wt-*" tcp flags syn tcp option maxseg size set rt mtu
+  }
+}

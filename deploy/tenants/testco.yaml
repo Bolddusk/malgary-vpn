@@ -1,0 +1,27 @@
+# Test tenant for the pilot (FR-017, US3): Microsoft Entra sign-in plus Malgary-managed
+# accounts, to prove per-tenant sign-in and isolation (quickstart V5, V14).
+apiVersion: malgary.io/v1
+kind: Tenant
+metadata:
+  slug: testco
+  legalName: "TestCo (pilot test tenant)"
+spec:
+  cell: c01
+  identity:
+    signInMethods: [sso, managed]
+    upstreamIdps:
+      - type: entra
+    allowedDomains: [REPLACE_WITH_ENTRA_TEST_DOMAIN]   # e.g. malgarytest.onmicrosoft.com
+    allowedEmails: []                                  # add non-Entra test addresses for V14
+    mfaRequired: true
+  subscription:
+    plan: ent-testco
+    planVersion: 1
+    quantity: 5
+    paymentProvider: manual
+  gateways:
+    - pair: gw-nyc-1
+  routing:
+    default:
+      mode: full_tunnel
+    callExclusions: []

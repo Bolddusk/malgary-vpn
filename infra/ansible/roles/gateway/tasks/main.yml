@@ -1,0 +1,96 @@
+---
+# Base data path (T021). Failover (keepalived) is added by US2 tasks.
+- name: Read the anchor gateway from the metadata service
+  ansible.builtin.uri:
+    url: http://169.254.169.254/metadata/v1/interfaces/public/0/anchor_ipv4/gateway
+    return_content: true
+  register: anchor_gw
+  changed_when: false
+
+- name: Stop cloud-init from rewriting the network config
+  ansible.builtin.copy:
+    dest: /etc/cloud/cloud.cfg.d/99-disable-network-config.cfg
+    content: "network: {config: disabled}\n"
+    mode: "0644"
+
+- name: Persistent default route via the anchor gateway, so traffic leaves from the reserved IP
+  ansible.builtin.template:
+    src: 60-anchor-route.yaml.j2
+    dest: /etc/netplan/60-anchor-route.yaml
+    mode: "0600"
+  vars:
+    anchor_gateway: "{{ anchor_gw.content | trim }}"
+  notify: Apply netplan
+
+- name: IP forwarding
+  ansible.posix.sysctl:
+    name: "{{ item }}"
+    value: "1"
+    sysctl_file: /etc/sysctl.d/60-malgary-gateway.conf
+  loop: [net.ipv4.ip_forward, net.ipv6.conf.all.forwarding]
+
+- name: nftables include directory
+  ansible.builtin.file: {path: /etc/nftables.d, state: directory, mode: "0750"}
+
+- name: NAT for tenant WireGuard interfaces and MSS clamping
+  ansible.builtin.template:
+    src: gateway-nat.nft.j2
+    dest: /etc/nftables.d/10-gateway-nat.nft
+    mode: "0600"
+  notify: Reload nftables
+
+# --- Failover (US2: T053–T055) ---
+- name: Keepalived and jq
+  ansible.builtin.apt: {name: [keepalived, jq, curl], state: present}
+
+- name: Pair facts (peer address and this droplet's ID)
+  ansible.builtin.set_fact:
+    pair_name: "{{ (group_names | select('match', '^pair_') | first)[5:] | replace('_', '-') }}"
+    pair_peer_ip: "{{ hostvars[(groups[group_names | select('match', '^pair_') | first] | difference([inventory_hostname]) | first)].private_ipv4 }}"
+    droplet_id: "{{ do_id }}"
+    is_primary: "{{ inventory_hostname is match('.*a\\.c[0-9]{2}$') }}"
+
+- name: DO token for moving the reserved IP (scoped to reserved IPs)
+  ansible.builtin.copy:
+    dest: /etc/malgary/do-reserved-ip.token
+    content: "{{ secrets.digitalocean.reserved_ip_token }}"
+    mode: "0600"
+  no_log: true
+
+- name: Reserved IP of this pair
+  ansible.builtin.copy:
+    dest: /etc/malgary/reserved-ip
+    content: "{{ gateway_reserved_ip }}\n"
+    mode: "0644"
+
+- name: Health and notify scripts
+  ansible.builtin.copy:
+    src: "{{ item }}"
+    dest: "/usr/local/bin/{{ item }}"
+    mode: "0755"
+  loop: [gw-health, reserved-ip-notify]
+
+- name: VRRP between the pair over the VPC only (unicast, research R3)
+  ansible.builtin.copy:
+    dest: /etc/nftables.d/20-vrrp.nft
+    content: |
+      table inet malgary_vrrp
+      delete table inet malgary_vrrp
+      table inet malgary_vrrp {
+        chain input {
+          type filter hook input priority -10; policy accept;
+          ip protocol vrrp ip saddr != {{ pair_peer_ip }} drop
+        }
+      }
+    mode: "0600"
+  notify: Reload nftables
+
+- name: Keepalived configuration
+  ansible.builtin.template:
+    src: keepalived.conf.j2
+    dest: /etc/keepalived/keepalived.conf
+    mode: "0600"
+  notify: Restart keepalived
+
+- name: Enable keepalived
+  ansible.builtin.systemd: {name: keepalived, enabled: true, state: started}

@@ -1,0 +1,60 @@
+---
+# Recurring drills (T101, constitution Principle IV and Operational Standards):
+#   - monthly: restore the latest backup into the staging cell
+#   - quarterly: one gateway failover test in staging
+# Installed on the staging control host; results are pushed as metrics and logged.
+- name: Drill timers on the staging control host
+  hosts: control
+  become: true
+  tasks:
+    - name: Drill script
+      ansible.builtin.copy:
+        dest: /usr/local/sbin/malgary-drill
+        mode: "0750"
+        content: |
+          #!/usr/bin/env bash
+          # malgary-drill restore|failover — runs against the STAGING cell only.
+          set -uo pipefail
+          kind=$1; start=$(date +%s); ok=0
+          case "$kind" in
+            restore)  cd /opt/malgary/ansible && ansible-playbook restore.yml -e "restore_date=$(date -u -d yesterday +%Y/%m/%d)" && ok=1 ;;
+            failover) ssh gw-nyc-1a.c90.vpn-staging.malgary.com sudo systemctl stop keepalived && sleep 90 && \
+                      ssh gw-nyc-1a.c90.vpn-staging.malgary.com sudo systemctl start keepalived && ok=1 ;;
+          esac
+          mkdir -p /var/lib/alloy/textfile
+          printf 'malgary_drill_last_run_timestamp_seconds{kind="%s"} %s\nmalgary_drill_last_success{kind="%s"} %s\nmalgary_drill_duration_seconds{kind="%s"} %s\n' \
+            "$kind" "$(date +%s)" "$kind" "$ok" "$kind" "$(( $(date +%s) - start ))" > "/var/lib/alloy/textfile/drill-$kind.prom"
+          logger -t malgary-drill "$kind drill ok=$ok"
+
+    - name: Drill units
+      ansible.builtin.copy:
+        dest: "/etc/systemd/system/{{ item.name }}"
+        mode: "0644"
+        content: "{{ item.content }}"
+      loop:
+        - name: malgary-drill@.service
+          content: |
+            [Unit]
+            Description=Malgary %i drill (staging)
+            [Service]
+            Type=oneshot
+            ExecStart=/usr/local/sbin/malgary-drill %i
+        - name: malgary-drill-restore.timer
+          content: |
+            [Timer]
+            OnCalendar=*-*-01 04:00:00
+            Unit=malgary-drill@restore.service
+            [Install]
+            WantedBy=timers.target
+        - name: malgary-drill-failover.timer
+          content: |
+            [Timer]
+            OnCalendar=*-01,04,07,10-15 04:00:00
+            Unit=malgary-drill@failover.service
+            [Install]
+            WantedBy=timers.target
+      loop_control: {label: "{{ item.name }}"}
+
+    - name: Enable drill timers
+      ansible.builtin.systemd: {name: "{{ item }}", enabled: true, state: started, daemon_reload: true}
+      loop: [malgary-drill-restore.timer, malgary-drill-failover.timer]

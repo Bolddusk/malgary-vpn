@@ -1,0 +1,9 @@
+zitadel_image: "ghcr.io/zitadel/zitadel:v4.20.1"
+zitadel_login_image: "ghcr.io/zitadel/zitadel-login:v4.20.1"
+zitadel_dir: /opt/malgary/zitadel
+zitadel_domain: "id.{{ dns_zone }}"
+zitadel_port: 18080
+zitadel_login_port: 13000
+# Email via provider on an unblocked port (DO blocks 25/465/587; research R9).
+zitadel_smtp_host: "smtp.postmarkapp.com:2525"
+zitadel_smtp_from: "no-reply@{{ dns_zone }}"

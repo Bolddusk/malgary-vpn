@@ -1,0 +1,31 @@
+# Managed by Ansible (role zitadel).
+services:
+  zitadel:
+    image: {{ zitadel_image }}
+    restart: unless-stopped
+    command: start-from-init --masterkeyFile /masterkey --config /config.yaml --steps /init-steps.yaml --tlsMode external
+    ports: ["127.0.0.1:{{ zitadel_port }}:8080"]
+    volumes:
+      - ./masterkey:/masterkey:ro
+      - ./config.yaml:/config.yaml:ro
+      - ./init-steps.yaml:/init-steps.yaml:ro
+      - ./machinekey:/machinekey
+    healthcheck:
+      test: ["CMD", "/app/zitadel", "ready", "--config", "/config.yaml"]
+      interval: 15s
+      timeout: 5s
+      retries: 10
+
+  login:
+    image: {{ zitadel_login_image }}
+    restart: unless-stopped
+    ports: ["127.0.0.1:{{ zitadel_login_port }}:3000"]
+    environment:
+      ZITADEL_API_URL: http://zitadel:8080
+      CUSTOM_REQUEST_HEADERS: "Host:{{ zitadel_domain }}"
+      NEXT_PUBLIC_BASE_PATH: /ui/v2/login
+      ZITADEL_SERVICE_USER_TOKEN_FILE: /machinekey/login-client.pat
+    volumes:
+      - ./machinekey:/machinekey:ro
+    depends_on:
+      zitadel: {condition: service_healthy}

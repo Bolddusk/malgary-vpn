@@ -1,0 +1,8 @@
+stack_root: /opt/malgary/stacks
+secret_root: /etc/malgary/secrets
+netbird_server_image: "netbirdio/netbird-server"
+netbird_dashboard_image: "netbirdio/dashboard"
+netbird_dashboard_version: "v2.40.0"   # pin; upgraded with the stack (runbook upgrade-netbird)
+# Who may open a tenant's NetBird dashboard (operators only, Principle X): the VPC and the
+# egress IPs of the malgary-ops tenant's gateway pair.
+operator_source_ranges: ["10.10.0.0/16"]

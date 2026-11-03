@@ -1,0 +1,51 @@
+#!/usr/bin/env bash
+# Managed by Ansible (role gateway). Called by keepalived on state changes. On MASTER, assign
+# the pair's reserved IP to this droplet through the DigitalOcean API (T054). Idempotent: does
+# nothing if the IP is already ours. Retries for up to 30 seconds.
+set -uo pipefail
+state=${1:-unknown}
+ip=$(tr -d '[:space:]' </etc/malgary/reserved-ip)
+token=$(cat /etc/malgary/do-reserved-ip.token)
+self=$(curl -fsS http://169.254.169.254/metadata/v1/id)
+api=https://api.digitalocean.com/v2
+metrics=/var/lib/alloy/textfile/failover.prom
+log() { logger -t reserved-ip-notify "$*"; }
+
+record() {
+  mkdir -p "$(dirname "$metrics")"
+  local total=0
+  [[ -f $metrics ]] && total=$(awk '/^gateway_failover_total/{print $2}' "$metrics")
+  [[ $1 == master ]] && total=$((total + 1))
+  {
+    echo "gateway_failover_total ${total:-0}"
+    echo "gateway_is_master $([[ $1 == master ]] && echo 1 || echo 0)"
+    echo "gateway_state_change_timestamp_seconds $(date +%s)"
+  } >"$metrics"
+}
+
+holder() {
+  curl -fsS -H "Authorization: Bearer $token" "$api/reserved_ips/$ip" | jq -r '.reserved_ip.droplet.id // empty'
+}
+
+log "state=$state reserved_ip=$ip droplet=$self"
+record "$state"
+[[ $state == master ]] || exit 0
+
+deadline=$((SECONDS + 30))
+delay=1
+while ((SECONDS < deadline)); do
+  if [[ $(holder) == "$self" ]]; then
+    log "reserved IP $ip is assigned to this droplet"
+    exit 0
+  fi
+  if curl -fsS -X POST -H "Authorization: Bearer $token" -H "Content-Type: application/json" \
+    -d "{\"type\":\"assign\",\"droplet_id\":$self}" "$api/reserved_ips/$ip/actions" >/dev/null; then
+    log "assign requested"
+  else
+    log "assign request failed; retrying in ${delay}s"
+  fi
+  sleep "$delay"
+  delay=$((delay < 4 ? delay * 2 : 4))
+done
+log "ERROR: could not take reserved IP $ip within 30s"
+exit 1

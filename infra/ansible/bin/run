@@ -1,0 +1,14 @@
+#!/usr/bin/env bash
+# Run an Ansible playbook with secrets decrypted only into a private temp file that is removed
+# on exit. Usage: bin/run <playbook.yml> [ansible-playbook args...]
+# Needs AGE_IDENTITY (path to the operator's age private key) and DO_API_TOKEN for inventory.
+set -euo pipefail
+cd "$(dirname "$0")/.."
+: "${AGE_IDENTITY:?set AGE_IDENTITY to your age private key file}"
+secrets_file=$(mktemp)
+chmod 600 "$secrets_file"
+trap 'rm -f "$secrets_file"' EXIT
+age -d -i "$AGE_IDENTITY" group_vars/all/secrets.age.yml > "$secrets_file"
+exec_status=0
+ansible-playbook -e "@$secrets_file" "$@" || exec_status=$?
+exit $exec_status

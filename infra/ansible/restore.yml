@@ -1,0 +1,67 @@
+---
+# Restore a control host from the nightly encrypted backup (T091, docs/runbooks/restore-cell.md).
+#   AGE_IDENTITY=~/malgary-backup.key bin/run restore.yml -e restore_date=2026/11/03 [-l ctl-1.c01]
+# The backup private key never lives on servers: it is copied for the restore and shredded.
+- name: Restore control host data
+  hosts: control
+  become: true
+  vars:
+    restore_dir: /root/restore
+    backup_bucket: "malgary-{{ malgary_cell }}-backups"
+  tasks:
+    - name: Require a date
+      ansible.builtin.assert:
+        that: restore_date is defined and restore_date is match('^\d{4}/\d{2}/\d{2}$')
+        fail_msg: "Pass -e restore_date=YYYY/MM/DD"
+
+    - name: Working directory
+      ansible.builtin.file: {path: "{{ restore_dir }}", state: directory, mode: "0700"}
+
+    - name: Backup key (temporary)
+      ansible.builtin.copy:
+        src: "{{ lookup('env', 'AGE_IDENTITY') }}"
+        dest: "{{ restore_dir }}/key"
+        mode: "0600"
+      no_log: true
+
+    - name: Download the backup set
+      ansible.builtin.command: >
+        rclone --config /etc/malgary/rclone.conf copy
+        spaces:{{ backup_bucket }}/{{ restore_date }}/{{ inventory_hostname }} {{ restore_dir }}/set
+      changed_when: true
+
+    - name: Stop writers
+      ansible.builtin.shell: |
+        systemctl stop malgaryd || true
+        for d in /opt/malgary/stacks/*/; do docker compose -p "nb-$(basename "$d")" --project-directory "$d" stop || true; done
+        docker compose --project-directory /opt/malgary/zitadel stop || true
+      changed_when: true
+
+    - name: Restore files
+      ansible.builtin.shell: |
+        set -euo pipefail
+        age -d -i {{ restore_dir }}/key {{ restore_dir }}/set/files.tar.gz.age | tar -xzf - -C /
+      args: {executable: /bin/bash}
+      changed_when: true
+
+    - name: Restore every database
+      ansible.builtin.shell: |
+        set -euo pipefail
+        for f in {{ restore_dir }}/set/*.dump.age; do
+          db=$(basename "$f" .dump.age)
+          sudo -u postgres psql -tc "SELECT 1 FROM pg_database WHERE datname='$db'" | grep -q 1 || sudo -u postgres createdb "$db"
+          age -d -i {{ restore_dir }}/key "$f" | sudo -u postgres pg_restore --clean --if-exists --no-owner --role=postgres -d "$db"
+        done
+      args: {executable: /bin/bash}
+      changed_when: true
+
+    - name: Shred the key and the set
+      ansible.builtin.shell: shred -u {{ restore_dir }}/key && rm -rf {{ restore_dir }}
+      changed_when: true
+
+    - name: Start services (malgaryd redeploys stacks whose applied hash differs)
+      ansible.builtin.shell: |
+        docker compose --project-directory /opt/malgary/zitadel up -d
+        for d in /opt/malgary/stacks/*/; do docker compose -p "nb-$(basename "$d")" --project-directory "$d" up -d; done
+        systemctl start malgaryd
+      changed_when: true

@@ -1,0 +1,43 @@
+# Prometheus-format alert rules for Grafana Cloud (load with:
+#   mimirtool rules load infra/observability/alerts/*.yaml). FR-024; each links a runbook.
+namespace: malgary
+groups:
+  - name: gateway
+    rules:
+      - alert: GatewayFailover
+        expr: increase(gateway_failover_total[5m]) > 0
+        labels: {severity: warning}
+        annotations:
+          summary: "Gateway {{ $labels.host }} took over the reserved IP"
+          runbook_url: https://github.com/malgary/malgary-vpn/blob/main/docs/runbooks/gateway-failover.md
+
+      - alert: GatewayPairNoMaster
+        expr: sum by (cell) (gateway_is_master) == 0
+        for: 1m
+        labels: {severity: critical}
+        annotations:
+          summary: "No gateway in cell {{ $labels.cell }} holds the reserved IP"
+          runbook_url: https://github.com/malgary/malgary-vpn/blob/main/docs/runbooks/gateway-both-down.md
+
+      - alert: GatewayBothDown
+        expr: count by (cell) (up{role="gateway"} == 1) == 0
+        for: 1m
+        labels: {severity: critical}
+        annotations:
+          summary: "Both gateways in cell {{ $labels.cell }} are down"
+          runbook_url: https://github.com/malgary/malgary-vpn/blob/main/docs/runbooks/gateway-both-down.md
+
+      - alert: GatewaySplitBrain
+        expr: max_over_time(gateway_split_brain[2m]) > 0
+        labels: {severity: critical}
+        annotations:
+          summary: "Gateway {{ $labels.host }} thought it was master but the reserved IP is elsewhere"
+          runbook_url: https://github.com/malgary/malgary-vpn/blob/main/docs/runbooks/gateway-failover.md
+
+      - alert: GatewayCPUHighAtPeak
+        expr: 1 - avg by (host) (rate(node_cpu_seconds_total{mode="idle",role="gateway"}[10m])) > 0.5
+        for: 15m
+        labels: {severity: warning}
+        annotations:
+          summary: "Gateway {{ $labels.host }} over 50% CPU: resize the pair (Operational Standards)"
+          runbook_url: https://github.com/malgary/malgary-vpn/blob/main/docs/runbooks/resize-gateway-pair.md

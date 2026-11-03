@@ -1,0 +1,58 @@
+name: ci
+on:
+  push:
+  pull_request:
+
+jobs:
+  infra:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: opentofu/setup-opentofu@v1
+        with:
+          tofu_version: 1.13.5
+      - name: fmt
+        run: tofu fmt -check -recursive infra
+      - name: validate envs
+        run: |
+          for env in infra/envs/*; do
+            tofu -chdir="$env" init -backend=false -input=false
+            tofu -chdir="$env" validate
+          done
+      - name: ansible-lint
+        working-directory: infra/ansible
+        run: |
+          pipx install ansible-lint
+          pipx inject ansible-lint ansible-core
+          pipx runpip ansible-lint install ansible
+          ansible-lint
+
+  backend:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: backend
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: backend/go.mod
+      - name: sqlc diff
+        uses: sqlc-dev/setup-sqlc@v4
+        with:
+          sqlc-version: 1.31.1
+      - run: sqlc diff
+      - uses: golangci/golangci-lint-action@v8
+        with:
+          working-directory: backend
+      - run: go test ./internal/... ./tests/contract/...
+      - name: OpenAPI lint
+        run: npx --yes @redocly/cli@2 lint api/openapi.yaml
+
+  secrets:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: gitleaks/gitleaks-action@v2

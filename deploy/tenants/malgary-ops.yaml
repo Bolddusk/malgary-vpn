@@ -1,0 +1,29 @@
+# Operator access tenant (research R13, FR-029, task T114). Operators connect to this tenant
+# to reach SSH and the NetBird dashboards over the VPC. Never sold, never billed.
+apiVersion: malgary.io/v1
+kind: Tenant
+metadata:
+  slug: malgary-ops
+  legalName: "Malgary (operators)"
+spec:
+  cell: c01
+  identity:
+    signInMethods: [sso]
+    upstreamIdps:
+      - type: google
+        hostedDomain: malgary.com
+    allowedDomains: [malgary.com]
+    mfaRequired: true
+  subscription:
+    plan: internal-ops
+    planVersion: 1
+    quantity: 10
+    paymentProvider: manual
+  gateways:
+    - pair: gw-nyc-1
+  routing:
+    # The cell VPC, plus the control host's public IP so dashboards (ipAllowList on the
+    # pair's egress IP) are reachable. Add the public IP after `tofu apply`.
+    default:
+      mode: destinations
+      destinations: ["10.10.0.0/16"]

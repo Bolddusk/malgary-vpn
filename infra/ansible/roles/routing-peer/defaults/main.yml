@@ -1,0 +1,2 @@
+netbird_client_image: "netbirdio/netbird"
+peer_state_root: /var/lib/malgary/peers

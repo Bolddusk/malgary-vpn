@@ -1,0 +1,38 @@
+# Managed by Ansible (role gateway). Unicast VRRP over the VPC; the MASTER takes the pair's
+# reserved IP through the DigitalOcean API (reserved-ip-notify). Both members start as BACKUP
+# with nopreempt, so a node that returns after a failure stays standby (FR-010).
+global_defs {
+  enable_script_security
+  script_user root
+}
+
+vrrp_script gw_health {
+  script "/usr/local/bin/gw-health"
+  interval 2
+  timeout 3
+  fall 2
+  rise 3
+}
+
+vrrp_instance {{ pair_name | replace('-', '_') }} {
+  state BACKUP
+  nopreempt
+  interface eth1
+  virtual_router_id {{ 50 + (pair_name | regex_replace('^.*-', '') | int) }}
+  priority {{ 150 if is_primary else 100 }}
+  advert_int 1
+  unicast_src_ip {{ private_ipv4 }}
+  unicast_peer {
+    {{ pair_peer_ip }}
+  }
+  authentication {
+    auth_type PASS
+    auth_pass {{ (secrets.digitalocean.reserved_ip_token | hash('sha256'))[:8] }}
+  }
+  track_script {
+    gw_health
+  }
+  notify_master "/usr/local/bin/reserved-ip-notify master"
+  notify_backup "/usr/local/bin/reserved-ip-notify backup"
+  notify_fault  "/usr/local/bin/reserved-ip-notify fault"
+}

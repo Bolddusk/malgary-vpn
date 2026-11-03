@@ -1,0 +1,17 @@
+# Dynamic inventory from DigitalOcean tags. Token from DO_API_TOKEN.
+# Hosts are reached over the VPC address (via the operator VPN, research R13).
+plugin: community.digitalocean.digitalocean
+attributes:
+  - id
+  - name
+  - tags
+  - networks
+  - region
+keyed_groups:
+  - key: do_tags | lower
+    prefix: ""
+    separator: ""
+compose:
+  ansible_host: do_networks.v4 | selectattr('type','eq','private') | map(attribute='ip_address') | first
+  public_ipv4: do_networks.v4 | selectattr('type','eq','public') | map(attribute='ip_address') | first
+  private_ipv4: do_networks.v4 | selectattr('type','eq','private') | map(attribute='ip_address') | first

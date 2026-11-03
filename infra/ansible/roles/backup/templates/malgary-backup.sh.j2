@@ -1,0 +1,21 @@
+#!/usr/bin/env bash
+# Managed by Ansible (role backup). Dumps every database, encrypts with age, uploads to Spaces
+# outside the cell region. Retention is the bucket lifecycle rule (30 days).
+set -euo pipefail
+umask 077
+stamp=$(date -u +%Y/%m/%d)
+host={{ inventory_hostname }}
+work=$(mktemp -d)
+trap 'rm -rf "$work"' EXIT
+recipient="{{ backup_age_recipient }}"
+
+for db in $(sudo -u postgres psql -Atc "select datname from pg_database where datname not in ('template0','template1','postgres')"); do
+  sudo -u postgres pg_dump -Fc "$db" | age -r "$recipient" > "$work/$db.dump.age"
+done
+tar -czf - {{ backup_paths | join(' ') }} 2>/dev/null | age -r "$recipient" > "$work/files.tar.gz.age"
+
+rclone --config /etc/malgary/rclone.conf copy "$work" "spaces:{{ backup_bucket }}/$stamp/$host"
+
+mkdir -p /var/lib/alloy/textfile
+printf 'malgary_backup_last_success_timestamp_seconds{host="%s"} %s\n' "$host" "$(date +%s)" \
+  > /var/lib/alloy/textfile/backup.prom

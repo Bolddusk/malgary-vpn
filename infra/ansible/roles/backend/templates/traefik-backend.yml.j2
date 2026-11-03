@@ -1,0 +1,12 @@
+# Managed by Ansible (role backend).
+http:
+  routers:
+    backend:
+      rule: "Host(`{{ backend_domain }}`)"
+      entryPoints: [websecure]
+      service: backend
+      tls: {certResolver: le}
+  services:
+    backend:
+      loadBalancer:
+        servers: [{url: "http://127.0.0.1:{{ backend_port }}"}]

@@ -1,0 +1,9 @@
+# Managed by Ansible (role postgres).
+local   all   postgres                      peer
+local   all   all                           scram-sha-256
+host    all   all   127.0.0.1/32            scram-sha-256
+host    malgary  malgary_owner,malgary_app  {{ postgres_vpc_cidr }}  scram-sha-256
+host    zitadel  zitadel                    {{ postgres_vpc_cidr }}  scram-sha-256
+# Docker bridge networks on this host (tenant stacks, Zitadel).
+host    all   all   172.16.0.0/12           scram-sha-256
+include_dir hba.d

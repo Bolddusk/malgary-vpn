@@ -1,0 +1,78 @@
+# Prometheus-format alert rules for Grafana Cloud (mimirtool rules load). FR-024, T093.
+namespace: malgary
+groups:
+  - name: platform
+    rules:
+      - alert: HostDown
+        expr: up{job=~"integrations/unix|node"} == 0
+        for: 2m
+        labels: {severity: critical}
+        annotations:
+          summary: "{{ $labels.host }} is down"
+          runbook_url: https://github.com/malgary/malgary-vpn/blob/main/docs/runbooks/host-down.md
+
+      - alert: TenantStackUnhealthy
+        expr: sum by (host, container_label_com_docker_compose_project) (container_last_seen{container_label_com_docker_compose_project=~"nb-.*"}) < time() - 120
+        labels: {severity: critical}
+        annotations:
+          summary: "Tenant stack {{ $labels.container_label_com_docker_compose_project }} on {{ $labels.host }} stopped"
+          runbook_url: https://github.com/malgary/malgary-vpn/blob/main/docs/runbooks/tenant-stack-down.md
+
+      - alert: PostgresDown
+        expr: pg_up == 0
+        for: 2m
+        labels: {severity: critical}
+        annotations:
+          summary: "PostgreSQL on {{ $labels.host }} is down"
+          runbook_url: https://github.com/malgary/malgary-vpn/blob/main/docs/runbooks/postgres-down.md
+
+      - alert: SignInDown
+        expr: probe_success{target="id"} == 0
+        for: 2m
+        labels: {severity: critical}
+        annotations:
+          summary: "Malgary sign-in (Zitadel) is not answering"
+          runbook_url: https://github.com/malgary/malgary-vpn/blob/main/docs/runbooks/sign-in-down.md
+
+      - alert: BackendDown
+        expr: absent_over_time(malgary_up[3m])
+        labels: {severity: critical}
+        annotations:
+          summary: "malgaryd is not reporting"
+          runbook_url: https://github.com/malgary/malgary-vpn/blob/main/docs/runbooks/backend-down.md
+
+      - alert: BackupMissed
+        expr: time() - malgary_backup_last_success_timestamp_seconds > 26 * 3600
+        labels: {severity: warning}
+        annotations:
+          summary: "No successful backup from {{ $labels.host }} for over 26 hours"
+          runbook_url: https://github.com/malgary/malgary-vpn/blob/main/docs/runbooks/backup-missed.md
+
+      - alert: ReconcileDrift
+        expr: malgary_reconcile_drift_tenants > 0
+        for: 20m
+        labels: {severity: warning}
+        annotations:
+          summary: "{{ $value }} tenant(s) drift from the backend's desired state"
+          runbook_url: https://github.com/malgary/malgary-vpn/blob/main/docs/runbooks/reconcile-drift.md
+
+      - alert: SeatLimitHit
+        expr: increase(malgary_tenant_seat_limit_hit_total[15m]) > 0
+        labels: {severity: info}
+        annotations:
+          summary: "A tenant tried to add users beyond its paid seats (FR-016)"
+          runbook_url: https://github.com/malgary/malgary-vpn/blob/main/docs/runbooks/seat-limit.md
+
+      - alert: BandwidthNearIncluded
+        expr: sum by (cell) (increase(node_network_transmit_bytes_total{role="gateway",device="eth0"}[30d])) > 0.8 * 2 * 1024^4
+        labels: {severity: warning}
+        annotations:
+          summary: "Gateways in {{ $labels.cell }} passed 80% of included transfer (Operational Standards)"
+          runbook_url: https://github.com/malgary/malgary-vpn/blob/main/docs/runbooks/bandwidth.md
+
+      - alert: SecurityReleasePending
+        expr: malgary_release_pending_days > 5
+        labels: {severity: warning}
+        annotations:
+          summary: "{{ $labels.component }} security release unapplied for {{ $value }} days (7-day window, Principle VI)"
+          runbook_url: https://github.com/malgary/malgary-vpn/blob/main/docs/runbooks/upgrade-netbird.md

@@ -1,0 +1,40 @@
+# Secrets — never commit
+.env
+.env.*
+*.age.key
+/secrets/
+# Plaintext secret files anywhere (the age-encrypted secrets.age.yml is fine to commit)
+**/secrets.yml
+**/secrets.plain.*
+*service-account*.json
+*.pem
+
+# OpenTofu
+*.tfstate
+*.tfstate.*
+.terraform/
+crash.log
+
+# Go
+backend/bin/
+
+# OS / editor
+.DS_Store
+.idea/
+.vscode/
+
+# Go build/test artefacts
+*.exe
+*.test
+*.out
+vendor/
+
+# Ansible
+*.retry
+infra/ansible/.vault-pass*
+
+# Local tool caches
+.tofu/
+
+# Claude Code local settings
+.claude/settings.local.json

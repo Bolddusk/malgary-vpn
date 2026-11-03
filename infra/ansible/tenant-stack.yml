@@ -1,0 +1,33 @@
+---
+# Apply one tenant StackSpec (contracts/tenant-stack.md). Run by malgaryd on the control host:
+#   ansible-playbook tenant-stack.yml -e spec_file=/opt/malgary/specs/<slug>.json
+- name: Load the stack spec
+  hosts: localhost
+  connection: local
+  gather_facts: false
+  tasks:
+    - name: Read spec
+      ansible.builtin.set_fact:
+        spec: "{{ lookup('ansible.builtin.file', spec_file) | from_json }}"
+
+    - name: Add the tenant's gateway hosts (reached by private DNS over the VPC)
+      ansible.builtin.add_host:
+        name: "{{ item.host }}"
+        ansible_host: "{{ item.host }}.{{ dns_zone }}"
+        groups: [spec_gateways]
+        routing_peer: "{{ item }}"
+        spec: "{{ spec }}"
+      loop: "{{ spec.routingPeers }}"
+      loop_control: {label: "{{ item.host }}"}
+
+- name: Tenant NetBird stack on this control host
+  hosts: localhost
+  connection: local
+  become: true
+  roles: [tenant-stack]
+
+- name: Tenant routing peers on gateways
+  hosts: spec_gateways
+  become: true
+  remote_user: malgary-deployer
+  roles: [routing-peer]

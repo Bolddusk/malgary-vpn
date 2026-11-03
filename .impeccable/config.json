@@ -1,0 +1,17 @@
+{
+  "detector": {
+    "ignoreRules": [],
+    "ignoreFiles": [],
+    "ignoreValues": [
+      {
+        "rule": "wide-tracking",
+        "value": "*",
+        "files": [
+          "docs/architecture-overview.html"
+        ],
+        "createdAt": "2026-11-03T12:14:00.675Z",
+        "reason": "Claude triage: 0.08em tracking is only on short uppercase SVG section labels (.lab: PEOPLE, OUTSIDE SERVICES, CELL c01), the case the rule itself exempts"
+      }
+    ]
+  }
+}

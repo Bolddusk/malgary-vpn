@@ -1,0 +1,42 @@
+#!/usr/bin/env bash
+# Managed by Ansible (role gateway). keepalived health check (T053) and split-brain guard
+# (T055). Exit 0 = healthy. Unhealthy demotes this node so the peer takes over.
+set -uo pipefail
+
+# 1. Default route still goes via the anchor gateway (egress through the reserved IP).
+anchor=$(curl -fsS --max-time 1 http://169.254.169.254/metadata/v1/interfaces/public/0/anchor_ipv4/gateway) || exit 1
+ip route show default | grep -q "via $anchor" || exit 1
+
+# 2. NAT rules are loaded.
+nft list table ip malgary_nat >/dev/null 2>&1 || exit 1
+
+# 3. At least one routing peer container is running (none yet on a brand-new pair is fine).
+peers=$(docker ps --filter label=malgary.tenant -q 2>/dev/null | wc -l)
+expected=$(docker ps -a --filter label=malgary.tenant -q 2>/dev/null | wc -l)
+if ((expected > 0 && peers == 0)); then
+  exit 1
+fi
+
+# 4. Split-brain guard: if we think we're MASTER but the API says the peer holds the IP for
+#    more than one check, step down and let the alert fire (FR-010). Checked at most every 10s.
+state_file=/run/gw-health.state
+if [[ -f /var/lib/alloy/textfile/failover.prom ]] && grep -q '^gateway_is_master 1' /var/lib/alloy/textfile/failover.prom; then
+  now=$(date +%s)
+  last=$(cat "$state_file" 2>/dev/null || echo 0)
+  if ((now - last >= 10)); then
+    echo "$now" >"$state_file"
+    ip=$(tr -d '[:space:]' </etc/malgary/reserved-ip)
+    token=$(cat /etc/malgary/do-reserved-ip.token)
+    self=$(curl -fsS --max-time 1 http://169.254.169.254/metadata/v1/id)
+    holder=$(curl -fsS --max-time 2 -H "Authorization: Bearer $token" \
+      "https://api.digitalocean.com/v2/reserved_ips/$ip" | jq -r '.reserved_ip.droplet.id // empty')
+    if [[ -n $holder && $holder != "$self" ]]; then
+      mkdir -p /var/lib/alloy/textfile
+      echo "gateway_split_brain 1" >/var/lib/alloy/textfile/split-brain.prom
+      logger -t gw-health "split brain: MASTER here but reserved IP held by droplet $holder; stepping down"
+      exit 1
+    fi
+    echo "gateway_split_brain 0" >/var/lib/alloy/textfile/split-brain.prom
+  fi
+fi
+exit 0

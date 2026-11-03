@@ -1,0 +1,144 @@
+---
+- name: Service user
+  ansible.builtin.user: {name: malgary, system: true, groups: [docker], append: true, shell: /usr/sbin/nologin}
+
+- name: Secret store directory (root and malgary only)
+  ansible.builtin.file: {path: /etc/malgary/secrets, state: directory, owner: root, group: malgary, mode: "0770"}
+
+- name: Stack spec directory
+  ansible.builtin.file: {path: /opt/malgary/specs, state: directory, owner: malgary, mode: "0750"}
+
+- name: Ansible on the control host (the pilot deployer, research R7)
+  ansible.builtin.apt: {name: [ansible, python3-psycopg2], state: present}
+
+- name: Playbooks for the deployer
+  ansible.posix.synchronize:
+    src: "{{ playbook_dir }}/"
+    dest: /opt/malgary/ansible/
+    delete: true
+    rsync_opts: ["--exclude=group_vars/all/secrets*", "--exclude=*.retry"]
+
+- name: Cell inventories (generated from `tofu output`, see docs/runbooks/add-tenant.md)
+  ansible.builtin.copy:
+    src: "{{ playbook_dir }}/../../deploy/cells/"
+    dest: /etc/malgary/cells/
+    mode: "0644"
+
+- name: Deployer SSH key for reaching gateways over the VPC
+  ansible.builtin.copy:
+    dest: /root/.ssh/malgary-deployer
+    content: "{{ secrets.deployer.ssh_private_key }}"
+    mode: "0600"
+  no_log: true
+
+- name: Root SSH config for the deployer
+  ansible.builtin.copy:
+    dest: /root/.ssh/config
+    content: |
+      Host *.{{ dns_zone }}
+        User malgary-deployer
+        IdentityFile /root/.ssh/malgary-deployer
+        StrictHostKeyChecking accept-new
+    mode: "0600"
+
+- name: Deploy wrapper (the only command malgaryd may sudo)
+  ansible.builtin.copy:
+    dest: /usr/local/sbin/malgary-deploy
+    mode: "0750"
+    content: |
+      #!/usr/bin/env bash
+      # Run the tenant-stack playbook for one StackSpec under /opt/malgary/specs.
+      set -euo pipefail
+      spec=$(realpath -e "$1")
+      case "$spec" in /opt/malgary/specs/*.json) ;; *) echo "refusing $spec" >&2; exit 2 ;; esac
+      cd /opt/malgary/ansible
+      exec ansible-playbook -i localhost, tenant-stack.yml -e "spec_file=$spec"
+
+- name: Allow malgaryd to run only the deploy wrapper as root
+  ansible.builtin.copy:
+    dest: /etc/sudoers.d/91-malgary-deploy
+    content: "malgary ALL=(root) NOPASSWD: /usr/local/sbin/malgary-deploy\n"
+    mode: "0440"
+    validate: visudo -cf %s
+
+- name: Backend secrets used at runtime (resolved as secret://<name>)
+  ansible.builtin.copy:
+    dest: "/etc/malgary/secrets/{{ item.name }}"
+    content: "{{ item.value }}"
+    owner: root
+    group: malgary
+    mode: "0640"
+  loop:
+    - {name: spaces-access-key, value: "{{ secrets.spaces.access_key }}"}
+    - {name: spaces-secret-key, value: "{{ secrets.spaces.secret_key }}"}
+    - {name: zitadel-claims-signing-key, value: "{{ secrets.zitadel.claims_signing_key | default('') }}"}
+  loop_control: {label: "{{ item.name }}"}
+  no_log: true
+
+- name: Backend binary (built locally with `make build`)
+  ansible.builtin.copy:
+    src: "{{ backend_bin_src }}"
+    dest: /usr/local/bin/malgaryd
+    mode: "0755"
+  notify: Restart malgaryd
+
+- name: Backend environment
+  ansible.builtin.template:
+    src: malgaryd.env.j2
+    dest: /etc/malgary/malgaryd.env
+    owner: root
+    group: malgary
+    mode: "0640"
+  no_log: true
+  notify: Restart malgaryd
+
+- name: Systemd unit
+  ansible.builtin.template:
+    src: malgaryd.service.j2
+    dest: /etc/systemd/system/malgaryd.service
+    mode: "0644"
+  notify: Restart malgaryd
+
+- name: Enable malgaryd
+  ansible.builtin.systemd: {name: malgaryd, enabled: true, state: started, daemon_reload: true}
+
+- name: Traefik route for the API
+  ansible.builtin.template:
+    src: traefik-backend.yml.j2
+    dest: "{{ traefik_dir }}/dynamic/backend.yml"
+    mode: "0640"
+
+- name: Release watch (Principle VI 7-day patch window; feeds SecurityReleasePending)
+  ansible.builtin.copy:
+    dest: /usr/local/sbin/malgary-release-watch
+    mode: "0755"
+    content: |
+      #!/usr/bin/env bash
+      # Days since the newest upstream release of NetBird and Zitadel was published, when the
+      # deployed version is older. 0 when up to date.
+      set -uo pipefail
+      out=/var/lib/alloy/textfile/releases.prom; : > "$out.tmp"
+      check() { # component repo deployed
+        latest=$(curl -fsS "https://api.github.com/repos/$2/releases/latest") || return
+        tag=$(echo "$latest" | jq -r .tag_name | sed 's/^v//'); pub=$(echo "$latest" | jq -r .published_at)
+        days=0; [[ "$tag" != "$3" ]] && days=$(( ( $(date +%s) - $(date -d "$pub" +%s) ) / 86400 ))
+        echo "malgary_release_pending_days{component=\"$1\",latest=\"$tag\",deployed=\"$3\"} $days" >> "$out.tmp"
+      }
+      check netbird netbirdio/netbird "$(grep -h '^MALGARY_NETBIRD_VERSION=' /etc/malgary/malgaryd.env | cut -d= -f2 || echo unknown)"
+      check zitadel zitadel/zitadel "$(docker inspect --format '{{ "{{" }}.Config.Image{{ "}}" }}' $(docker ps -q --filter name=zitadel-zitadel) 2>/dev/null | sed 's/.*:v//')"
+      mv "$out.tmp" "$out"
+
+- name: Release watch timer
+  ansible.builtin.copy:
+    dest: "/etc/systemd/system/{{ item.name }}"
+    mode: "0644"
+    content: "{{ item.content }}"
+  loop:
+    - name: malgary-release-watch.service
+      content: "[Service]\nType=oneshot\nExecStart=/usr/local/sbin/malgary-release-watch\n"
+    - name: malgary-release-watch.timer
+      content: "[Timer]\nOnCalendar=daily\nPersistent=true\n[Install]\nWantedBy=timers.target\n"
+  loop_control: {label: "{{ item.name }}"}
+
+- name: Enable release watch
+  ansible.builtin.systemd: {name: malgary-release-watch.timer, enabled: true, state: started, daemon_reload: true}

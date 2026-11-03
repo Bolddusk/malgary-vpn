@@ -1,0 +1,5 @@
+gateway_wg_port_min: 51820
+gateway_wg_port_max: 52820
+gateway_public_if: eth0
+# Set per pair in inventory or group_vars (from `tofu output egress_ips`).
+gateway_reserved_ip: "{{ egress_ips[pair_name] | default('') }}"

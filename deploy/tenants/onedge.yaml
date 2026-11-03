@@ -1,0 +1,32 @@
+# Tenant #1: the first customer (FR-004: Google sign-in). Quickstart step 4.
+apiVersion: malgary.io/v1
+kind: Tenant
+metadata:
+  slug: onedge
+  legalName: "On Edge"
+spec:
+  cell: c01
+  identity:
+    signInMethods: [sso]
+    upstreamIdps:
+      - type: google
+        hostedDomain: REPLACE_WITH_COMPANY_GOOGLE_DOMAIN
+    allowedDomains: [REPLACE_WITH_COMPANY_GOOGLE_DOMAIN]
+    allowedEmails: []
+    mfaRequired: true
+  subscription:
+    plan: ent-onedge
+    planVersion: 1
+    quantity: 10
+    paymentProvider: manual
+  gateways:
+    - pair: gw-nyc-1
+  routing:
+    default:
+      mode: full_tunnel     # FR-005c
+    # Call ranges kept off the VPN (FR-006, research R12). IPv4 CIDRs from the providers'
+    # published lists; fill in before go-live (pilot test P-7).
+    callExclusions: []
+  posture:
+    minClientVersion: "0.82.0"
+    minOs: {windows: "10.0.19045", macos: "14.0", ios: "17.0", android: "13"}

@@ -1,0 +1,32 @@
+# Managed by Ansible (role tenant-stack) from StackSpec {{ spec.hash }}. Do not edit.
+server:
+  listenAddress: ":80"
+  exposedAddress: "https://{{ spec.managementDomain }}:443"
+  stunPorts:
+    - {{ stun_port }}
+  metricsPort: 9090
+  healthcheckAddress: ":9000"
+  logLevel: "info"
+  logFile: "console"
+
+  authSecret: "{{ relay_auth_secret }}"
+  dataDir: "/var/lib/netbird"
+
+  auth:
+    issuer: "https://{{ spec.managementDomain }}/oauth2"
+    signKeyRefreshEnabled: true
+    sessionCookieEncryptionKey: "{{ session_cookie_key }}"
+    dashboardRedirectURIs:
+      - "https://{{ spec.managementDomain }}/nb-auth"
+      - "https://{{ spec.managementDomain }}/nb-silent-auth"
+    cliRedirectURIs:
+      - "http://localhost:53000/"
+
+  reverseProxy:
+    trustedHTTPProxies:
+      - "172.16.0.0/12"
+
+  store:
+    engine: "postgres"
+    dsn: "host={{ spec.database.host }} user={{ spec.database.user }} password={{ db_password }} dbname={{ spec.database.name }} port=5432 sslmode=disable"
+    encryptionKey: "{{ datastore_key_raw | b64encode }}"

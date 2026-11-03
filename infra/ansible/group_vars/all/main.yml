@@ -1,0 +1,9 @@
+# Non-secret settings shared by every host. Secrets live in secrets.age.yml (see runbook).
+malgary_cell: "{{ (group_names | select('match', '^cell_') | first | default('cell_c01'))[5:] }}"
+malgary_role: "{{ 'control' if 'control' in group_names else ('gateway' if 'gateway' in group_names else 'other') }}"
+dns_zone: "vpn.malgary.com"
+base_vpc_cidr: "10.10.0.0/16"
+postgres_vpc_cidr: "{{ base_vpc_cidr }}"
+traefik_dir: /opt/malgary/traefik
+# Egress IP per gateway pair, from the generated cell inventory (deploy/cells/<cell>.yaml).
+egress_ips: "{{ (lookup('ansible.builtin.file', playbook_dir ~ '/../../deploy/cells/' ~ malgary_cell ~ '.yaml', errors='ignore') | default('{}', true) | from_yaml).gatewayPairs | default([]) | items2dict(key_name='name', value_name='egressIp') }}"

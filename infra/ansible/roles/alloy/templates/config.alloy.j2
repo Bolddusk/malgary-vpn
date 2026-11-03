@@ -1,0 +1,86 @@
+// Managed by Ansible (role alloy). Ships metrics and logs to Grafana Cloud, so alerts fire
+// even when this host is down (research R9).
+prometheus.remote_write "cloud" {
+  endpoint {
+    url = "{{ secrets.grafana.prom_url }}"
+    basic_auth {
+      username = "{{ secrets.grafana.prom_user }}"
+      password = "{{ secrets.grafana.api_key }}"
+    }
+  }
+  external_labels = {
+    cell = "{{ malgary_cell }}",
+    role = "{{ malgary_role }}",
+    host = "{{ inventory_hostname }}",
+  }
+}
+
+prometheus.exporter.unix "node" { }
+
+prometheus.scrape "node" {
+  targets    = prometheus.exporter.unix.node.targets
+  forward_to = [prometheus.remote_write.cloud.receiver]
+}
+
+prometheus.exporter.cadvisor "docker" {
+  docker_host = "unix:///var/run/docker.sock"
+}
+
+prometheus.scrape "docker" {
+  targets    = prometheus.exporter.cadvisor.docker.targets
+  forward_to = [prometheus.remote_write.cloud.receiver]
+}
+
+// Local push target for job metrics (backups, failover notify): textfile directory.
+prometheus.exporter.unix "textfile" {
+  set_collectors = ["textfile"]
+  textfile { directory = "/var/lib/alloy/textfile" }
+}
+
+prometheus.scrape "textfile" {
+  targets    = prometheus.exporter.unix.textfile.targets
+  forward_to = [prometheus.remote_write.cloud.receiver]
+}
+{% if malgary_role == 'control' %}
+
+prometheus.exporter.postgres "pg" {
+  data_source_names = ["postgresql://malgary_app:{{ secrets.postgres.malgary_app }}@127.0.0.1:5432/malgary?sslmode=disable"]
+}
+
+prometheus.scrape "pg" {
+  targets    = prometheus.exporter.postgres.pg.targets
+  forward_to = [prometheus.remote_write.cloud.receiver]
+}
+
+prometheus.scrape "traefik" {
+  targets    = [{"__address__" = "{{ private_ipv4 }}:8082"}]
+  forward_to = [prometheus.remote_write.cloud.receiver]
+}
+
+prometheus.scrape "backend" {
+  targets    = [{"__address__" = "127.0.0.1:9100"}]
+  forward_to = [prometheus.remote_write.cloud.receiver]
+}
+{% endif %}
+{% if malgary_role == 'gateway' %}
+
+prometheus.scrape "wg_usage" {
+  targets    = [{"__address__" = "127.0.0.1:9586"}]
+  forward_to = [prometheus.remote_write.cloud.receiver]
+}
+{% endif %}
+
+loki.source.journal "journal" {
+  forward_to = [loki.write.cloud.receiver]
+  labels     = { cell = "{{ malgary_cell }}", host = "{{ inventory_hostname }}" }
+}
+
+loki.write "cloud" {
+  endpoint {
+    url = "{{ secrets.grafana.loki_url }}"
+    basic_auth {
+      username = "{{ secrets.grafana.loki_user }}"
+      password = "{{ secrets.grafana.api_key }}"
+    }
+  }
+}

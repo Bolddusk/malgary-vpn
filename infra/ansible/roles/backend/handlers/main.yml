@@ -1,0 +1,3 @@
+---
+- name: Restart malgaryd
+  ansible.builtin.systemd: {name: malgaryd, state: restarted, daemon_reload: true}

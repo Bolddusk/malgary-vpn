@@ -1,0 +1,4 @@
+backup_bucket: "malgary-{{ malgary_cell }}-backups"
+backup_endpoint: "https://ams3.digitaloceanspaces.com"
+backup_age_recipient: "{{ secrets.backup.age_recipient }}"  # public key; private key kept offline
+backup_paths: [/etc/malgary, /opt/malgary/stacks, /opt/malgary/specs, /opt/malgary/zitadel/config.yaml]

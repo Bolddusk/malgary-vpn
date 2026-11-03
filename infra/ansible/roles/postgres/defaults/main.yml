@@ -1,0 +1,7 @@
+postgres_version: 17
+postgres_data_mount: /mnt/pgdata
+postgres_volume_device: "/dev/disk/by-id/scsi-0DO_Volume_pgdata-{{ inventory_hostname | replace('.', '-') }}"
+postgres_vpc_cidr: "10.10.0.0/16"
+postgres_shared_buffers: 2GB
+postgres_effective_cache_size: 5GB
+postgres_max_connections: 300

@@ -1,0 +1,310 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Malgary VPN Architecture</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Sans+Condensed:wght@600&display=swap" rel="stylesheet">
+<style>
+  /* Layout idea: one wide left-to-right system map (people → platform → cell → internet),
+     then two reading columns: how a connection works, how each part grows. */
+  :root {
+    --bg: #f5f6f4;
+    --ink: #1c2320;
+    --muted: #5b6660;
+    --panel: #ffffff;
+    --region: #e9ece8;
+    --line: #c3cac5;
+    --path: #0a7766;
+    --path-soft: #dcefeb;
+    --display: "IBM Plex Sans Condensed", "Arial Narrow", sans-serif;
+    --body: "IBM Plex Sans", "Segoe UI", system-ui, sans-serif;
+    color-scheme: light;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --bg: #121614; --ink: #e3e8e5; --muted: #98a39d; --panel: #1a201d;
+      --region: #161b18; --line: #36403b; --path: #3fc8af; --path-soft: #173a33;
+      color-scheme: dark;
+    }
+  }
+  :root[data-theme="dark"] {
+    --bg: #121614; --ink: #e3e8e5; --muted: #98a39d; --panel: #1a201d;
+    --region: #161b18; --line: #36403b; --path: #3fc8af; --path-soft: #173a33;
+    color-scheme: dark;
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; }
+  body {
+    background: var(--bg); color: var(--ink); font-family: var(--body);
+    font-size: 15px; line-height: 1.55; padding: 32px 24px 56px;
+  }
+  main { max-width: 1240px; margin: 0 auto; display: grid; gap: 28px; }
+  header { display: grid; gap: 6px; max-width: 70ch; }
+  h1 { font-family: var(--display); font-size: 30px; line-height: 1.15; margin: 0; text-wrap: balance; }
+  h2 { font-family: var(--display); font-size: 19px; margin: 0 0 10px; text-wrap: balance; }
+  .lede { color: var(--muted); margin: 0; }
+  figure { margin: 0; background: var(--panel); border: 1px solid var(--line); border-radius: 12px; padding: 16px; }
+  .scroll { overflow-x: auto; }
+  svg.map { display: block; width: 100%; min-width: 980px; height: auto; color: var(--ink); }
+  figcaption { color: var(--muted); font-size: 13.5px; margin-top: 10px; max-width: 90ch; }
+  .cols { display: grid; grid-template-columns: repeat(auto-fit, minmax(340px, 1fr)); gap: 28px; }
+  ol.steps { margin: 0; padding: 0; list-style: none; display: grid; gap: 10px; }
+  ol.steps li { display: grid; grid-template-columns: 28px 1fr; gap: 10px; align-items: start; }
+  .n { width: 24px; height: 24px; border: 1.5px solid var(--ink); border-radius: 50%; display: grid; place-items: center; font-size: 12.5px; font-weight: 600; margin-top: 1px; }
+  .n.p { border-color: var(--path); color: var(--path); }
+  table { width: 100%; border-collapse: collapse; font-size: 14px; }
+  th, td { text-align: left; padding: 8px 10px 8px 0; border-bottom: 1px solid var(--line); vertical-align: top; }
+  th { font-weight: 600; color: var(--muted); font-size: 12.5px; text-transform: uppercase; letter-spacing: .04em; }
+  td:first-child { font-weight: 500; white-space: nowrap; }
+  .legend { display: flex; flex-wrap: wrap; gap: 18px; font-size: 13px; color: var(--muted); margin-top: 8px; }
+  .legend span { display: inline-flex; align-items: center; gap: 8px; }
+  .sw { width: 28px; height: 0; border-top: 2.5px solid var(--path); display: inline-block; }
+  .sw.d { border-top: 1.5px dashed var(--ink); }
+  .sw.k { border-top: 1.5px solid var(--ink); }
+
+  /* SVG marks */
+  .region { fill: var(--region); stroke: var(--line); }
+  .box { fill: var(--panel); stroke: var(--line); stroke-width: 1.2; }
+  .box.act { stroke: var(--path); stroke-width: 2; }
+  .box.dsh { stroke-dasharray: 5 4; }
+  .chip { fill: var(--region); stroke: var(--line); }
+  .pill { fill: var(--path-soft); stroke: var(--path); stroke-width: 1.5; }
+  .t { fill: var(--ink); font-family: var(--body); font-size: 12.5px; }
+  .tb { fill: var(--ink); font-family: var(--body); font-size: 13.5px; font-weight: 600; }
+  .ts { fill: var(--muted); font-family: var(--body); font-size: 12px; }
+  .lab { fill: var(--muted); font-family: var(--body); font-size: 12px; font-weight: 600; letter-spacing: .08em; }
+  .acc { fill: var(--path); }
+  .wire { stroke: var(--ink); stroke-width: 1.4; fill: none; }
+  .wire.d { stroke-dasharray: 5 4; }
+  .wire.p { stroke: var(--path); stroke-width: 2.5; }
+  .mk { fill: var(--ink); }
+  .mkp { fill: var(--path); }
+  .bd { fill: var(--panel); stroke: var(--ink); stroke-width: 1.4; }
+  .bd.p { stroke: var(--path); }
+  .bn { fill: var(--ink); font-family: var(--body); font-size: 12px; font-weight: 600; }
+  .bn.p { fill: var(--path); }
+</style>
+</head>
+<body>
+<main>
+  <header>
+    <h1>Malgary VPN Architecture</h1>
+    <p class="lede">Where each part fits in the pilot (cell c01, DigitalOcean New York), and how it grows to 100,000 users without a redesign. Constitution v2.0.0, plan for feature 001.</p>
+  </header>
+
+  <figure>
+    <div class="scroll">
+    <svg class="map" viewBox="0 84 1400 686" role="img" aria-label="System map: end users sign in through Malgary sign-in, get their configuration from their own NetBird stack on the control host, and tunnel to their own routing peer on the active gateway, whose traffic leaves from one reserved IP. Admins and owners work through the portal and backend, which drives Zitadel and the NetBird stacks.">
+      <defs>
+        <marker id="a" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path class="mk" d="M0,0 L10,5 L0,10 z"/></marker>
+        <marker id="ap" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path class="mkp" d="M0,0 L10,5 L0,10 z"/></marker>
+      </defs>
+
+      <!-- Column headers -->
+      <text class="lab" x="20" y="100">PEOPLE</text>
+      <text class="lab" x="1195" y="100">OUTSIDE SERVICES</text>
+
+      <!-- People -->
+      <rect class="box" x="20" y="110" width="180" height="80" rx="8"/>
+      <text class="tb" x="110" y="145" text-anchor="middle">Customer admin</text>
+      <text class="ts" x="110" y="164" text-anchor="middle">in a browser</text>
+
+      <rect class="box" x="20" y="235" width="180" height="80" rx="8"/>
+      <text class="tb" x="110" y="270" text-anchor="middle">Owners (you)</text>
+      <text class="ts" x="110" y="289" text-anchor="middle">CLI now, back-office later</text>
+
+      <rect class="box" x="20" y="365" width="180" height="80" rx="8"/>
+      <text class="tb" x="110" y="400" text-anchor="middle">Google / Microsoft</text>
+      <text class="ts" x="110" y="419" text-anchor="middle">customer's own login</text>
+
+      <rect class="box act" x="20" y="500" width="180" height="200" rx="8"/>
+      <text class="tb" x="110" y="590" text-anchor="middle">End user</text>
+      <text class="ts" x="110" y="609" text-anchor="middle">official NetBird app</text>
+      <text class="ts" x="110" y="626" text-anchor="middle">laptop or phone</text>
+
+      <!-- Platform region -->
+      <rect class="region" x="245" y="80" width="400" height="535" rx="10"/>
+      <text class="lab" x="262" y="102">MALGARY PLATFORM · SHARED BY ALL CUSTOMERS</text>
+
+      <rect class="box" x="270" y="115" width="350" height="75" rx="8"/>
+      <text class="tb" x="445" y="139" text-anchor="middle">Client portal &amp; back-office</text>
+      <text class="ts" x="445" y="157" text-anchor="middle">customers: users, groups, rules, usage</text>
+      <text class="ts" x="445" y="174" text-anchor="middle">owners: plans, invoices · built in feature 002</text>
+
+      <line class="wire" x1="445" y1="190" x2="445" y2="212" marker-end="url(#a)"/>
+      <text class="ts" x="455" y="206">API</text>
+
+      <rect class="box" x="270" y="215" width="350" height="255" rx="8"/>
+      <text class="tb" x="445" y="240" text-anchor="middle">Malgary backend</text>
+      <text class="ts" x="445" y="257" text-anchor="middle">system of record · written in Go</text>
+      <rect class="chip" x="285" y="272" width="155" height="28" rx="5"/><text class="t" x="362" y="290" text-anchor="middle">Tenant directory</text>
+      <rect class="chip" x="455" y="272" width="150" height="28" rx="5"/><text class="t" x="530" y="290" text-anchor="middle">Plans &amp; subscriptions</text>
+      <rect class="chip" x="285" y="308" width="155" height="28" rx="5"/><text class="t" x="362" y="326" text-anchor="middle">Routing &amp; posture</text>
+      <rect class="chip" x="455" y="308" width="150" height="28" rx="5"/><text class="t" x="530" y="326" text-anchor="middle">Usage &amp; last seen</text>
+      <rect class="chip" x="285" y="344" width="155" height="28" rx="5"/><text class="t" x="362" y="362" text-anchor="middle">Audit log</text>
+      <rect class="chip" x="455" y="344" width="150" height="28" rx="5"/><text class="t" x="530" y="362" text-anchor="middle">Reconciler</text>
+      <rect class="chip" x="285" y="384" width="320" height="28" rx="5" stroke-dasharray="5 4"/><text class="t" x="445" y="402" text-anchor="middle">Payments: manual now, gateways later</text>
+      <text class="ts" x="445" y="446" text-anchor="middle">one API for the CLI, the portal and the back-office</text>
+
+      <line class="wire" x1="445" y1="470" x2="445" y2="507" marker-end="url(#a)"/>
+      <text class="ts" x="455" y="493">users, invites</text>
+
+      <rect class="box" x="270" y="510" width="350" height="90" rx="8"/>
+      <text class="tb" x="445" y="535" text-anchor="middle">Malgary sign-in (Zitadel)</text>
+      <text class="ts" x="445" y="554" text-anchor="middle">one organization per customer</text>
+      <text class="ts" x="445" y="571" text-anchor="middle">your branding · MFA · email invitations</text>
+
+      <!-- Cell region -->
+      <rect class="region" x="700" y="80" width="470" height="620" rx="10"/>
+      <text class="lab" x="715" y="102">CELL c01 · DIGITALOCEAN NEW YORK</text>
+
+      <rect class="box" x="715" y="112" width="440" height="268" rx="8"/>
+      <text class="tb" x="730" y="134">Control host</text>
+      <rect class="box" x="730" y="146" width="130" height="90" rx="6"/>
+      <text class="tb" x="795" y="172" text-anchor="middle">NetBird stack</text>
+      <text class="t" x="795" y="191" text-anchor="middle">onedge</text>
+      <text class="ts" x="795" y="210" text-anchor="middle">own DB &amp; login</text>
+      <rect class="box" x="875" y="146" width="130" height="90" rx="6"/>
+      <text class="tb" x="940" y="172" text-anchor="middle">NetBird stack</text>
+      <text class="t" x="940" y="191" text-anchor="middle">testco</text>
+      <text class="ts" x="940" y="210" text-anchor="middle">own DB &amp; login</text>
+      <rect class="box dsh" x="1020" y="146" width="120" height="90" rx="6"/>
+      <text class="t" x="1080" y="184" text-anchor="middle">+ one stack</text>
+      <text class="ts" x="1080" y="202" text-anchor="middle">per customer</text>
+      <rect class="chip" x="730" y="250" width="410" height="28" rx="5"/>
+      <text class="t" x="935" y="268" text-anchor="middle">Traefik · TLS · onedge.vpn.&lt;domain&gt;, testco.vpn.&lt;domain&gt;</text>
+      <rect class="chip" x="730" y="290" width="410" height="28" rx="5"/>
+      <text class="t" x="935" y="308" text-anchor="middle">PostgreSQL · nb_onedge · nb_testco · zitadel · malgary</text>
+      <text class="ts" x="730" y="345">Pilot: the platform services on the left also run on this host.</text>
+      <text class="ts" x="730" y="362">They move to their own servers as you grow.</text>
+
+      <line class="wire" x1="940" y1="380" x2="940" y2="418" marker-end="url(#a)"/>
+      <text class="ts" x="950" y="404">routes &amp; keys</text>
+
+      <rect class="box" x="715" y="420" width="440" height="262" rx="8"/>
+      <text class="tb" x="730" y="442">Gateway pair · gw-nyc-1</text>
+
+      <rect class="box act" x="730" y="456" width="195" height="130" rx="6"/>
+      <text class="tb acc" x="745" y="478">gw-a · active</text>
+      <rect class="chip" x="745" y="490" width="165" height="26" rx="5"/><text class="t" x="827" y="507" text-anchor="middle">routing peer · onedge</text>
+      <rect class="chip" x="745" y="522" width="165" height="26" rx="5"/><text class="t" x="827" y="539" text-anchor="middle">routing peer · testco</text>
+      <text class="ts" x="827" y="570" text-anchor="middle">one per customer</text>
+
+      <rect class="box dsh" x="945" y="456" width="195" height="130" rx="6"/>
+      <text class="tb" x="960" y="478">gw-b · standby</text>
+      <rect class="chip" x="960" y="490" width="165" height="26" rx="5"/><text class="t" x="1042" y="507" text-anchor="middle">routing peer · onedge</text>
+      <rect class="chip" x="960" y="522" width="165" height="26" rx="5"/><text class="t" x="1042" y="539" text-anchor="middle">routing peer · testco</text>
+      <text class="ts" x="1042" y="570" text-anchor="middle">takes over the IP</text>
+
+      <line class="wire p" x1="827" y1="586" x2="827" y2="620"/>
+      <line class="wire d" x1="1042" y1="586" x2="1042" y2="620"/>
+      <circle class="bd" cx="872" cy="603" r="10"/><text class="bn" x="872" y="607" text-anchor="middle">7</text>
+      <text class="ts" x="888" y="607">keepalived failover</text>
+
+      <rect class="pill" x="730" y="620" width="410" height="44" rx="22"/>
+      <text class="tb acc" x="935" y="647" text-anchor="middle">Reserved IP 203.0.113.10 · the IP clients allowlist</text>
+
+      <!-- Outside services -->
+      <rect class="box" x="1195" y="112" width="190" height="56" rx="8"/>
+      <text class="tb" x="1290" y="136" text-anchor="middle">DigitalOcean API</text>
+      <text class="ts" x="1290" y="154" text-anchor="middle">moves the reserved IP</text>
+      <rect class="box" x="1195" y="178" width="190" height="56" rx="8"/>
+      <text class="tb" x="1290" y="202" text-anchor="middle">Spaces · Amsterdam</text>
+      <text class="ts" x="1290" y="220" text-anchor="middle">encrypted nightly backups</text>
+      <rect class="box" x="1195" y="244" width="190" height="56" rx="8"/>
+      <text class="tb" x="1290" y="268" text-anchor="middle">Grafana Cloud</text>
+      <text class="ts" x="1290" y="286" text-anchor="middle">metrics and alerts</text>
+      <rect class="box" x="1195" y="310" width="190" height="56" rx="8"/>
+      <text class="tb" x="1290" y="334" text-anchor="middle">Email provider</text>
+      <text class="ts" x="1290" y="352" text-anchor="middle">invitations, over HTTPS</text>
+      <rect class="box dsh" x="1195" y="376" width="190" height="56" rx="8"/>
+      <text class="tb" x="1290" y="400" text-anchor="middle">Payment gateways</text>
+      <text class="ts" x="1290" y="418" text-anchor="middle">later · manual today</text>
+
+      <rect class="box" x="1195" y="520" width="190" height="110" rx="8"/>
+      <text class="tb" x="1290" y="550" text-anchor="middle">Internet &amp;</text>
+      <text class="tb" x="1290" y="568" text-anchor="middle">client systems</text>
+      <text class="ts" x="1290" y="594" text-anchor="middle">see only the reserved IP</text>
+      <text class="ts" x="1290" y="611" text-anchor="middle">and allowlist it once</text>
+
+      <!-- Flows -->
+      <!-- 5: admin and owners -->
+      <line class="wire" x1="200" y1="150" x2="267" y2="150" marker-end="url(#a)"/>
+      <circle class="bd" cx="232" cy="150" r="10"/><text class="bn" x="232" y="154" text-anchor="middle">5</text>
+      <line class="wire" x1="200" y1="275" x2="267" y2="275" marker-end="url(#a)"/>
+      <circle class="bd" cx="232" cy="275" r="10"/><text class="bn" x="232" y="279" text-anchor="middle">5</text>
+
+      <!-- Zitadel federates to customer IdP -->
+      <polyline class="wire" points="270,525 232,525 232,405 203,405" marker-end="url(#a)"/>
+      <text class="ts" x="224" y="478" text-anchor="end">federates</text>
+
+      <!-- 1: sign in -->
+      <line class="wire" x1="200" y1="552" x2="267" y2="552" marker-end="url(#a)"/>
+      <circle class="bd" cx="232" cy="552" r="10"/><text class="bn" x="232" y="556" text-anchor="middle">1</text>
+
+      <!-- 6: backend drives stacks -->
+      <line class="wire" x1="620" y1="232" x2="712" y2="232" marker-end="url(#a)"/>
+      <circle class="bd" cx="660" cy="232" r="10"/><text class="bn" x="660" y="236" text-anchor="middle">6</text>
+
+      <!-- 2: config from tenant stack -->
+      <polyline class="wire" points="200,645 680,645 680,264 712,264" marker-end="url(#a)"/>
+      <circle class="bd" cx="420" cy="645" r="10"/><text class="bn" x="420" y="649" text-anchor="middle">2</text>
+      <text class="ts" x="436" y="639">config &amp; keys from onedge.vpn.&lt;domain&gt;</text>
+
+      <!-- 3: WireGuard tunnel -->
+      <polyline class="wire p" points="200,680 690,680 690,520 726,520" marker-end="url(#ap)"/>
+      <circle class="bd p" cx="420" cy="680" r="10"/><text class="bn p" x="420" y="684" text-anchor="middle">3</text>
+      <text class="ts acc" x="436" y="674">WireGuard tunnel to own routing peer</text>
+
+      <!-- 4: egress -->
+      <polyline class="wire p" points="1140,642 1180,642 1180,575 1192,575" marker-end="url(#ap)"/>
+      <circle class="bd p" cx="1180" cy="610" r="10"/><text class="bn p" x="1180" y="614" text-anchor="middle">4</text>
+
+      <!-- Calls bypass -->
+      <polyline class="wire d" points="110,700 110,735 1290,735 1290,633" marker-end="url(#a)"/>
+      <text class="ts" x="700" y="756" text-anchor="middle">Calls (Meet, Teams, Zoom) go straight to the internet, never through the VPN</text>
+    </svg>
+    </div>
+    <figcaption>Each customer gets its own NetBird stack and its own routing peer, so customers are fully separated, yet they all share the same servers and leave through the same reserved IP. Customers only ever see the Malgary portal and the Malgary sign-in page.</figcaption>
+    <div class="legend">
+      <span><i class="sw"></i>user traffic</span>
+      <span><i class="sw k"></i>control and management</span>
+      <span><i class="sw d"></i>standby, later, or bypass</span>
+    </div>
+  </figure>
+
+  <div class="cols">
+    <section>
+      <h2>How a connection works</h2>
+      <ol class="steps">
+        <li><span class="n">1</span><span>The user clicks Connect in the NetBird app. The browser opens the Malgary sign-in page, which hands off to the customer's Google or Microsoft login, or uses email, password and MFA.</span></li>
+        <li><span class="n">2</span><span>The app fetches its configuration, keys and policies from that customer's own NetBird stack at <code>onedge.vpn.&lt;domain&gt;</code>.</span></li>
+        <li><span class="n p">3</span><span>The app opens a WireGuard tunnel to the customer's routing peer on the active gateway.</span></li>
+        <li><span class="n p">4</span><span>Traffic leaves the gateway from the reserved IP. Client systems allowlist this one address.</span></li>
+        <li><span class="n">5</span><span>Customer admins use the portal. You use the CLI now and the back-office later. Both go through the same backend API.</span></li>
+        <li><span class="n">6</span><span>The backend creates organizations and users in Zitadel, deploys each customer's NetBird stack, and sets their users, groups, routes and posture rules through the NetBird API.</span></li>
+        <li><span class="n">7</span><span>If gw-a fails, keepalived on gw-b asks the DigitalOcean API to move the reserved IP. Users reconnect within 60 seconds and the IP stays the same.</span></li>
+      </ol>
+    </section>
+    <section>
+      <h2>How each part grows</h2>
+      <table>
+        <thead><tr><th>When</th><th>What you add</th></tr></thead>
+        <tbody>
+          <tr><td>New customer</td><td>One more NetBird stack on a control host, and one routing peer per gateway. Around 50 small customers fit on one host.</td></tr>
+          <tr><td>10 → 50 users</td><td>Nothing new. Change sizes in configuration.</td></tr>
+          <tr><td>Busy gateway</td><td>Resize the pair, then add a second pair with its own reserved IP.</td></tr>
+          <tr><td>New region</td><td>A gateway pair in that region (San Francisco, Atlanta, Kansas City).</td></tr>
+          <tr><td>Bigger platform</td><td>Portal, backend and Zitadel move off the control host to their own servers. PostgreSQL moves to a dedicated or managed server.</td></tr>
+          <tr><td>Host or cell full</td><td>Add a control host, or open cell c02. About 20 cells reach 100,000 users.</td></tr>
+          <tr><td>Dedicated IP add-on</td><td>A gateway pair used by one customer only.</td></tr>
+        </tbody>
+      </table>
+    </section>
+  </div>
+</main>
+</body>
+</html>

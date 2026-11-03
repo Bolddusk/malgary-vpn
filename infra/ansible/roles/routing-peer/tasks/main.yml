@@ -1,0 +1,60 @@
+---
+# One NetBird client container per tenant on this gateway (research R2). Each joins its own
+# tenant's stack with the tenant's gateway setup key and leaves through the host default route,
+# i.e. the pair's reserved IP. Running several clients in one network namespace is pilot test P-2.
+- name: Peer facts
+  ansible.builtin.set_fact:
+    slug: "{{ spec.tenant }}"
+    setup_key: "{{ lookup('ansible.builtin.file', '/etc/malgary/secrets/' ~ (routing_peer.setupKeyRef | regex_replace('^secret://', ''))) }}"
+  no_log: true
+
+- name: Peer state directory
+  ansible.builtin.file:
+    path: "{{ peer_state_root }}/{{ slug }}"
+    state: directory
+    mode: "0700"
+
+- name: Routing peer container
+  community.docker.docker_container:
+    name: "rp-{{ slug }}"
+    image: "{{ netbird_client_image }}:{{ spec.netbirdVersion }}"
+    restart_policy: unless-stopped
+    network_mode: host
+    capabilities: [NET_ADMIN, SYS_MODULE, SYS_RESOURCE]
+    env:
+      NB_SETUP_KEY: "{{ setup_key }}"
+      NB_MANAGEMENT_URL: "https://{{ spec.managementDomain }}:443"
+      NB_HOSTNAME: "{{ inventory_hostname }}"
+      NB_INTERFACE_NAME: "{{ routing_peer.wgInterface }}"
+      NB_WIREGUARD_PORT: "{{ routing_peer.wgPort | string }}"
+      NB_DAEMON_ADDR: "unix:///var/run/netbird-{{ slug }}.sock"
+      NB_LOG_LEVEL: "info"
+    volumes:
+      - "{{ peer_state_root }}/{{ slug }}:/var/lib/netbird"
+    labels:
+      malgary.tenant: "{{ slug }}"
+      malgary.spec: "{{ spec.hash }}"
+  no_log: true
+
+- name: WireGuard usage exporter (T097)
+  ansible.builtin.copy:
+    src: wg-usage-exporter
+    dest: /usr/local/bin/wg-usage-exporter
+    mode: "0755"
+
+- name: Exporter service (listens on 9586; the cloud firewall and nftables allow it from the VPC only)
+  ansible.builtin.copy:
+    dest: /etc/systemd/system/wg-usage-exporter.service
+    mode: "0644"
+    content: |
+      [Unit]
+      Description=Malgary WireGuard per-peer byte counters
+      After=docker.service
+      [Service]
+      ExecStart=/usr/local/bin/wg-usage-exporter
+      Restart=always
+      [Install]
+      WantedBy=multi-user.target
+
+- name: Enable exporter
+  ansible.builtin.systemd: {name: wg-usage-exporter, enabled: true, state: started, daemon_reload: true}

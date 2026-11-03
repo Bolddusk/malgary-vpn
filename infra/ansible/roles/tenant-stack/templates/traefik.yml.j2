@@ -1,0 +1,43 @@
+# Managed by Ansible (role tenant-stack) for tenant {{ slug }}.
+http:
+  routers:
+    nb-{{ slug }}-grpc:
+      rule: "Host(`{{ spec.managementDomain }}`) && (PathPrefix(`/signalexchange.SignalExchange/`) || PathPrefix(`/management.ManagementService/`))"
+      entryPoints: [websecure]
+      service: nb-{{ slug }}-h2c
+      priority: 100
+      tls: {certResolver: le}
+    nb-{{ slug }}-backend:
+      rule: "Host(`{{ spec.managementDomain }}`) && (PathPrefix(`/relay`) || PathPrefix(`/ws-proxy/`) || PathPrefix(`/api`) || PathPrefix(`/oauth2`))"
+      entryPoints: [websecure]
+      service: nb-{{ slug }}
+      priority: 100
+      tls: {certResolver: le}
+    nb-{{ slug }}-setup:
+      rule: "Host(`{{ spec.managementDomain }}`) && (Path(`/`) || PathPrefix(`/setup`))"
+      entryPoints: [websecure]
+      service: setup-pages
+      priority: 90
+      tls: {certResolver: le}
+    # Dashboard: operators only (Principle X).
+    nb-{{ slug }}-dashboard:
+      rule: "Host(`{{ spec.managementDomain }}`)"
+      entryPoints: [websecure]
+      service: nb-{{ slug }}-dashboard
+      middlewares: [nb-{{ slug }}-operators]
+      priority: 10
+      tls: {certResolver: le}
+  middlewares:
+    nb-{{ slug }}-operators:
+      ipAllowList:
+        sourceRange: {{ operator_source_ranges | to_json }}
+  services:
+    nb-{{ slug }}:
+      loadBalancer:
+        servers: [{url: "http://127.0.0.1:{{ spec.httpPort }}"}]
+    nb-{{ slug }}-h2c:
+      loadBalancer:
+        servers: [{url: "h2c://127.0.0.1:{{ spec.httpPort }}"}]
+    nb-{{ slug }}-dashboard:
+      loadBalancer:
+        servers: [{url: "http://127.0.0.1:{{ dashboard_port }}"}]

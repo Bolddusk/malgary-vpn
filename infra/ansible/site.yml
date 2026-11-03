@@ -1,0 +1,20 @@
+---
+# Configure every host in a cell. Run through bin/run so secrets are decrypted only in memory.
+- name: Base configuration
+  hosts: all
+  become: true
+  roles: [base]
+
+- name: Control hosts
+  hosts: control
+  become: true
+  vars:
+    malgary_role: control
+  roles: [postgres, traefik, zitadel, alloy, backup, backend]
+
+- name: Gateways
+  hosts: gateway
+  become: true
+  vars:
+    malgary_role: gateway
+  roles: [gateway, alloy]

@@ -1,0 +1,19 @@
+# Availability SLO (SC-003, T112): 99.9% monthly per region, measured from outside by the
+# egress probe (infra/tools/egress-probe -listen :9587 -expect <reserved IP>) running on a small
+# Droplet in another region that is itself connected to the VPN as a malgary-ops device.
+# Load into Grafana Cloud SLO, or keep as recording + alert rules:
+namespace: malgary
+groups:
+  - name: slo
+    rules:
+      - record: malgary:vpn_availability:ratio_30d
+        expr: |
+          sum(increase(egress_probe_success_total[30d]))
+          /
+          (sum(increase(egress_probe_success_total[30d])) + sum(increase(egress_probe_failure_total[30d])) + sum(increase(egress_probe_wrong_ip_total[30d])))
+      - alert: AvailabilityBudgetBurning
+        expr: malgary:vpn_availability:ratio_30d < 0.999
+        labels: {severity: critical}
+        annotations:
+          summary: "VPN availability over 30 days is {{ $value | humanizePercentage }} (target 99.9%)"
+          runbook_url: https://github.com/malgary/malgary-vpn/blob/main/docs/runbooks/gateway-both-down.md

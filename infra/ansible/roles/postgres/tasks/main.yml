@@ -1,0 +1,94 @@
+---
+- name: Mount the PostgreSQL volume
+  ansible.posix.mount:
+    path: "{{ postgres_data_mount }}"
+    src: "{{ postgres_volume_device }}"
+    fstype: ext4
+    opts: defaults,nofail,discard
+    state: mounted
+
+- name: PGDG repository key
+  ansible.builtin.get_url:
+    url: https://www.postgresql.org/media/keys/ACCC4CF8.asc
+    dest: /etc/apt/keyrings/pgdg.asc
+    mode: "0644"
+
+- name: PGDG repository
+  ansible.builtin.apt_repository:
+    repo: "deb [signed-by=/etc/apt/keyrings/pgdg.asc] https://apt.postgresql.org/pub/repos/apt {{ ansible_distribution_release }}-pgdg main"
+    filename: pgdg
+
+- name: Createcluster.d directory
+  ansible.builtin.file:
+    path: /etc/postgresql-common/createcluster.d
+    state: directory
+    mode: "0755"
+
+- name: Don't let the package create a cluster on the root disk
+  ansible.builtin.copy:
+    dest: /etc/postgresql-common/createcluster.d/00-malgary.conf
+    content: "create_main_cluster = false\n"
+    mode: "0644"
+
+- name: Install PostgreSQL
+  ansible.builtin.apt:
+    name: ["postgresql-{{ postgres_version }}", python3-psycopg2]
+    state: present
+
+- name: Create the main cluster on the attached volume
+  ansible.builtin.command:
+    cmd: "pg_createcluster {{ postgres_version }} main -d {{ postgres_data_mount }}/{{ postgres_version }}/main --start"
+    creates: "{{ postgres_data_mount }}/{{ postgres_version }}/main/PG_VERSION"
+
+- name: Main configuration
+  ansible.builtin.template:
+    src: malgary.conf.j2
+    dest: "/etc/postgresql/{{ postgres_version }}/main/conf.d/malgary.conf"
+    mode: "0644"
+  notify: Restart postgres
+
+- name: Client authentication (scram only; tenant entries are included per tenant)
+  ansible.builtin.template:
+    src: pg_hba.conf.j2
+    dest: "/etc/postgresql/{{ postgres_version }}/main/pg_hba.conf"
+    owner: postgres
+    mode: "0640"
+  notify: Reload postgres
+
+- name: Tenant hba include directory
+  ansible.builtin.file:
+    path: "/etc/postgresql/{{ postgres_version }}/main/hba.d"
+    state: directory
+    owner: postgres
+    mode: "0750"
+
+- name: Platform roles
+  community.postgresql.postgresql_user:
+    name: "{{ item.name }}"
+    password: "{{ item.password }}"
+    role_attr_flags: "{{ item.flags | default('NOSUPERUSER,NOCREATEDB') }}"
+  become: true
+  become_user: postgres
+  no_log: true
+  loop:
+    - {name: malgary_owner, password: "{{ secrets.postgres.malgary_owner }}"}
+    - {name: malgary_app, password: "{{ secrets.postgres.malgary_app }}"}
+    - {name: zitadel, password: "{{ secrets.postgres.zitadel }}", flags: "NOSUPERUSER,CREATEDB"}
+
+- name: Platform databases
+  community.postgresql.postgresql_db:
+    name: "{{ item.db }}"
+    owner: "{{ item.owner }}"
+    encoding: UTF8
+  become: true
+  become_user: postgres
+  loop:
+    - {db: malgary, owner: malgary_owner}
+    - {db: zitadel, owner: zitadel}
+
+- name: citext extension for the backend
+  community.postgresql.postgresql_ext:
+    name: citext
+    db: malgary
+  become: true
+  become_user: postgres

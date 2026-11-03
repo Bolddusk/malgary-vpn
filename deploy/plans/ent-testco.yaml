@@ -1,0 +1,16 @@
+# Plan for the pilot's test tenant (FR-017). Free; exists so testco is provisioned the same way
+# as a paying tenant (Principle I).
+code: ent-testco
+name: "TestCo pilot"
+visibility: enterprise
+enterpriseTenant: testco
+publish: true
+version:
+  pricePerSeatMinor: 0
+  currency: USD
+  billingPeriod: monthly
+  minSeats: 1
+  maxSeats: 10
+  entitlements:
+    posture_checks: true
+  terms: "Pilot test tenant."

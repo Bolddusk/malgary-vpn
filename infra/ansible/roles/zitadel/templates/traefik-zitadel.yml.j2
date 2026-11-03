@@ -1,0 +1,20 @@
+# Managed by Ansible (role zitadel).
+http:
+  routers:
+    zitadel-login:
+      rule: "Host(`{{ zitadel_domain }}`) && PathPrefix(`/ui/v2/login`)"
+      entryPoints: [websecure]
+      service: zitadel-login
+      tls: {certResolver: le}
+    zitadel:
+      rule: "Host(`{{ zitadel_domain }}`)"
+      entryPoints: [websecure]
+      service: zitadel
+      tls: {certResolver: le}
+  services:
+    zitadel-login:
+      loadBalancer:
+        servers: [{url: "http://127.0.0.1:{{ zitadel_login_port }}"}]
+    zitadel:
+      loadBalancer:
+        servers: [{url: "h2c://127.0.0.1:{{ zitadel_port }}"}]

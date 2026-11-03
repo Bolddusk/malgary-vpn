@@ -1,0 +1,115 @@
+---
+- name: Stack facts
+  ansible.builtin.set_fact:
+    slug: "{{ spec.tenant }}"
+    stack_dir: "{{ stack_root }}/{{ spec.tenant }}"
+    tenant_secrets: "{{ secret_root }}/tenants/{{ spec.tenant }}"
+    stun_port: "{{ 3478 + (spec.httpPort | int) - 20000 }}"
+    dashboard_port: "{{ (spec.httpPort | int) + 10000 }}"
+
+- name: Stack and secret directories
+  ansible.builtin.file:
+    path: "{{ item }}"
+    state: directory
+    mode: "0750"
+  loop: ["{{ stack_dir }}", "{{ tenant_secrets }}"]
+
+- name: Per-tenant generated secrets (created once, kept on this host only)
+  ansible.builtin.set_fact:
+    relay_auth_secret: "{{ lookup('ansible.builtin.password', tenant_secrets ~ '/relay-auth chars=ascii_letters,digits length=48') }}"
+    session_cookie_key: "{{ lookup('ansible.builtin.password', tenant_secrets ~ '/session-key chars=ascii_letters,digits length=32') }}"
+    datastore_key_raw: "{{ lookup('ansible.builtin.password', tenant_secrets ~ '/datastore-key chars=ascii_letters,digits length=32') }}"
+    db_password: "{{ lookup('ansible.builtin.file', secret_root ~ '/' ~ (spec.database.passwordRef | regex_replace('^secret://', ''))) }}"
+  no_log: true
+
+- name: Secret files are private
+  ansible.builtin.file:
+    path: "{{ tenant_secrets }}/{{ item }}"
+    mode: "0600"
+  loop: [relay-auth, session-key, datastore-key]
+
+- name: Database role
+  community.postgresql.postgresql_user:
+    name: "{{ spec.database.user }}"
+    password: "{{ db_password }}"
+    role_attr_flags: NOSUPERUSER,NOCREATEDB,NOCREATEROLE
+  become_user: postgres
+  no_log: true
+
+- name: Database
+  community.postgresql.postgresql_db:
+    name: "{{ spec.database.name }}"
+    owner: "{{ spec.database.user }}"
+    encoding: UTF8
+  become_user: postgres
+
+- name: Rendered files (config, compose, Traefik route)
+  ansible.builtin.template:
+    src: "{{ item.src }}"
+    dest: "{{ item.dest }}"
+    mode: "0600"
+  loop:
+    - {src: config.yaml.j2, dest: "{{ stack_dir }}/config.yaml"}
+    - {src: compose.yaml.j2, dest: "{{ stack_dir }}/compose.yaml"}
+    - {src: dashboard.env.j2, dest: "{{ stack_dir }}/dashboard.env"}
+    - {src: traefik.yml.j2, dest: "{{ traefik_dir }}/dynamic/tenant-{{ slug }}.yml"}
+  loop_control: {label: "{{ item.dest }}"}
+  no_log: true
+  register: rendered
+
+- name: Keep the previous compose file for rollback
+  ansible.builtin.copy:
+    src: "{{ stack_dir }}/compose.yaml"
+    dest: "{{ stack_dir }}/compose.yaml.prev"
+    remote_src: true
+    mode: "0600"
+  when: rendered is changed
+
+- name: Start or update the stack
+  community.docker.docker_compose_v2:
+    project_src: "{{ stack_dir }}"
+    project_name: "nb-{{ slug }}"
+    state: present
+  register: up
+  ignore_errors: true
+
+- name: Health check through the management API (unauthenticated /api/instance)
+  ansible.builtin.uri:
+    url: "http://127.0.0.1:{{ spec.httpPort }}/api/instance"
+    status_code: 200
+  register: health
+  until: health is succeeded
+  retries: 24
+  delay: 5
+  when: up is succeeded
+  ignore_errors: true
+
+- name: Roll back on failure (contracts/tenant-stack.md obligation 5)
+  when: up is failed or health is failed
+  block:
+    - name: Restore previous compose file
+      ansible.builtin.copy:
+        src: "{{ stack_dir }}/compose.yaml.prev"
+        dest: "{{ stack_dir }}/compose.yaml"
+        remote_src: true
+        mode: "0600"
+    - name: Start previous version
+      community.docker.docker_compose_v2:
+        project_src: "{{ stack_dir }}"
+        project_name: "nb-{{ slug }}"
+        state: present
+    - name: Fail the deploy
+      ansible.builtin.fail:
+        msg: "Stack {{ slug }} failed health checks; rolled back to the previous version."
+
+- name: Setup page directory for this tenant (served by the shared setup-pages server)
+  ansible.builtin.file:
+    path: "/opt/malgary/setup-pages/{{ spec.managementDomain }}"
+    state: directory
+    mode: "0755"
+
+- name: Setup page (FR-019, FR-020; T049)
+  ansible.builtin.template:
+    src: setup-page.html.j2
+    dest: "/opt/malgary/setup-pages/{{ spec.managementDomain }}/index.html"
+    mode: "0644"

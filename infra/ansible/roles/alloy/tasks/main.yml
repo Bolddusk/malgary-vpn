@@ -1,0 +1,29 @@
+---
+- name: Grafana apt key
+  ansible.builtin.get_url:
+    url: https://apt.grafana.com/gpg.key
+    dest: /etc/apt/keyrings/grafana.asc
+    mode: "0644"
+
+- name: Grafana repository
+  ansible.builtin.apt_repository:
+    repo: "deb [signed-by=/etc/apt/keyrings/grafana.asc] https://apt.grafana.com stable main"
+    filename: grafana
+
+- name: Install Alloy
+  ansible.builtin.apt: {name: alloy, state: present}
+
+- name: Alloy can read Docker metrics and journald
+  ansible.builtin.user: {name: alloy, groups: [docker, systemd-journal], append: true}
+
+- name: Alloy configuration
+  ansible.builtin.template:
+    src: config.alloy.j2
+    dest: "{{ alloy_dir }}/config.alloy"
+    mode: "0640"
+    group: alloy
+  no_log: true
+  notify: Restart alloy
+
+- name: Enable Alloy
+  ansible.builtin.systemd: {name: alloy, enabled: true, state: started}

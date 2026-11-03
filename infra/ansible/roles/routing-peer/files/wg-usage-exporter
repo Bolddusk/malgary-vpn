@@ -1,0 +1,48 @@
+#!/usr/bin/env python3
+# Managed by Ansible (role routing-peer). Exposes per-peer WireGuard byte counters of every
+# tenant routing peer as Prometheus metrics on 127.0.0.1 and the VPC address, port 9586
+# (research R9, T097). Labels: tenant (from the interface's container label) and peer_ip (the
+# NetBird IP in allowed-ips), which malgaryd maps to users. Counts bytes only, never content.
+import http.server, subprocess, json, sys
+
+def tenants_by_iface():
+    out = {}
+    try:
+        ids = subprocess.run(["docker", "ps", "-q", "--filter", "label=malgary.tenant"], capture_output=True, text=True, timeout=5).stdout.split()
+        for cid in ids:
+            info = json.loads(subprocess.run(["docker", "inspect", cid], capture_output=True, text=True, timeout=5).stdout)[0]
+            env = dict(e.split("=", 1) for e in info["Config"]["Env"] if "=" in e)
+            out[env.get("NB_INTERFACE_NAME", "")] = info["Config"]["Labels"].get("malgary.tenant", "")
+    except Exception as e:  # keep serving; an empty scrape is better than none
+        print(e, file=sys.stderr)
+    return out
+
+def metrics():
+    names = tenants_by_iface()
+    lines = ["# TYPE malgary_wg_peer_rx_bytes counter", "# TYPE malgary_wg_peer_tx_bytes counter"]
+    dump = subprocess.run(["wg", "show", "all", "dump"], capture_output=True, text=True, timeout=5).stdout
+    for row in dump.splitlines():
+        f = row.split("\t")
+        if len(f) != 9 or f[0] not in names:   # interface lines have 5 fields; skip non-tenant ifaces
+            continue
+        iface, allowed, rx, tx = f[0], f[4], f[6], f[7]
+        ip = allowed.split(",")[0].split("/")[0]
+        lab = 'tenant="%s",peer_ip="%s"' % (names[iface], ip)
+        lines.append("malgary_wg_peer_rx_bytes{%s} %s" % (lab, rx))
+        lines.append("malgary_wg_peer_tx_bytes{%s} %s" % (lab, tx))
+    return "\n".join(lines) + "\n"
+
+class H(http.server.BaseHTTPRequestHandler):
+    def do_GET(self):
+        if self.path != "/metrics":
+            self.send_response(404); self.end_headers(); return
+        body = metrics().encode()
+        self.send_response(200)
+        self.send_header("Content-Type", "text/plain; version=0.0.4")
+        self.end_headers()
+        self.wfile.write(body)
+    def log_message(self, *a):
+        pass
+
+if __name__ == "__main__":
+    http.server.ThreadingHTTPServer(("0.0.0.0", 9586), H).serve_forever()

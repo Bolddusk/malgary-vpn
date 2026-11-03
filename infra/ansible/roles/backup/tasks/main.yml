@@ -1,0 +1,43 @@
+---
+- name: Backup tooling
+  ansible.builtin.apt: {name: [rclone, age], state: present}
+
+- name: Rclone remote for Spaces
+  ansible.builtin.template:
+    src: rclone.conf.j2
+    dest: /etc/malgary/rclone.conf
+    mode: "0600"
+  no_log: true
+
+- name: Backup script
+  ansible.builtin.template:
+    src: malgary-backup.sh.j2
+    dest: /usr/local/sbin/malgary-backup
+    mode: "0750"
+
+- name: Backup service and nightly timer
+  ansible.builtin.copy:
+    dest: "/etc/systemd/system/{{ item.name }}"
+    content: "{{ item.content }}"
+    mode: "0644"
+  loop:
+    - name: malgary-backup.service
+      content: |
+        [Unit]
+        Description=Malgary nightly encrypted backup to Spaces (FR-025)
+        [Service]
+        Type=oneshot
+        ExecStart=/usr/local/sbin/malgary-backup
+    - name: malgary-backup.timer
+      content: |
+        [Unit]
+        Description=Nightly Malgary backup
+        [Timer]
+        OnCalendar=*-*-* 02:30:00
+        RandomizedDelaySec=15m
+        Persistent=true
+        [Install]
+        WantedBy=timers.target
+
+- name: Enable the timer
+  ansible.builtin.systemd: {name: malgary-backup.timer, enabled: true, state: started, daemon_reload: true}

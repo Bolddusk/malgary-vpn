@@ -1,0 +1,99 @@
+---
+- name: Base packages
+  ansible.builtin.apt:
+    name: [unattended-upgrades, chrony, nftables, ca-certificates, curl, jq, age, python3-docker, wireguard-tools]
+    state: present
+    update_cache: true
+    cache_valid_time: 3600
+
+- name: Enable unattended security upgrades
+  ansible.builtin.copy:
+    dest: /etc/apt/apt.conf.d/20auto-upgrades
+    content: |
+      APT::Periodic::Update-Package-Lists "1";
+      APT::Periodic::Unattended-Upgrade "1";
+    mode: "0644"
+
+- name: Admin users (SSH keys only, one key set per person)
+  ansible.builtin.user:
+    name: "{{ item.name }}"
+    groups: [sudo]
+    append: true
+    shell: /bin/bash
+    password: "!"
+  loop: "{{ base_admin_users }}"
+  loop_control: {label: "{{ item.name }}"}
+
+- name: Authorized keys
+  ansible.posix.authorized_key:
+    user: "{{ item.name }}"
+    key: "{{ item.ssh_keys | join('\n') }}"
+    exclusive: true
+  loop: "{{ base_admin_users }}"
+  loop_control: {label: "{{ item.name }}"}
+
+- name: Passwordless sudo for admins
+  ansible.builtin.copy:
+    dest: /etc/sudoers.d/90-malgary-admins
+    content: "{% for u in base_admin_users %}{{ u.name }} ALL=(ALL) NOPASSWD:ALL\n{% endfor %}"
+    mode: "0440"
+    validate: visudo -cf %s
+
+- name: Deployer account on gateways (used by the control host's deploy wrapper over the VPC)
+  when: malgary_role == 'gateway'
+  block:
+    - name: Deployer user
+      ansible.builtin.user: {name: malgary-deployer, shell: /bin/bash, password: "!"}
+    - name: Deployer key
+      ansible.posix.authorized_key:
+        user: malgary-deployer
+        key: "{{ secrets.deployer.ssh_public_key }}"
+        exclusive: true
+    - name: Deployer sudo
+      ansible.builtin.copy:
+        dest: /etc/sudoers.d/91-malgary-deployer
+        content: "malgary-deployer ALL=(ALL) NOPASSWD:ALL\n"
+        mode: "0440"
+        validate: visudo -cf %s
+
+- name: Harden sshd (keys only, no root login)
+  ansible.builtin.copy:
+    dest: /etc/ssh/sshd_config.d/10-malgary.conf
+    content: |
+      PasswordAuthentication no
+      KbdInteractiveAuthentication no
+      PermitRootLogin prohibit-password
+    mode: "0644"
+  notify: Restart sshd
+
+- name: Host nftables (default deny; mirrors the cloud firewall)
+  ansible.builtin.template:
+    src: nftables.conf.j2
+    dest: /etc/nftables.conf
+    mode: "0600"
+  notify: Reload nftables
+
+- name: Enable nftables
+  ansible.builtin.systemd: {name: nftables, enabled: true, state: started}
+
+- name: Docker apt key
+  ansible.builtin.get_url:
+    url: https://download.docker.com/linux/ubuntu/gpg
+    dest: /etc/apt/keyrings/docker.asc
+    mode: "0644"
+
+- name: Docker repository
+  ansible.builtin.apt_repository:
+    repo: "deb [signed-by=/etc/apt/keyrings/docker.asc] https://download.docker.com/linux/ubuntu {{ ansible_distribution_release }} stable"
+    filename: docker
+
+- name: Docker Engine and compose plugin
+  ansible.builtin.apt:
+    name: [docker-ce, docker-ce-cli, containerd.io, docker-compose-plugin]
+    state: present
+
+- name: Malgary host identity
+  ansible.builtin.copy:
+    dest: /etc/malgary/host.json
+    content: "{{ {'cell': malgary_cell, 'role': malgary_role, 'name': inventory_hostname} | to_nice_json }}"
+    mode: "0644"

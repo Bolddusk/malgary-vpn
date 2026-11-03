@@ -1,0 +1,18 @@
+# Enterprise plan for tenant #1 (T078). Data applied through the API by `malgaryctl plan apply`,
+# not code (Principle XI). Published versions are immutable: to change the price, copy this
+# file's version block with the new values and apply again; existing subscribers stay on v1.
+code: ent-onedge
+name: "On Edge enterprise"
+visibility: enterprise
+enterpriseTenant: onedge
+publish: true
+version:
+  pricePerSeatMinor: 400        # $4.00 per seat
+  currency: USD
+  billingPeriod: monthly
+  minSeats: 1
+  entitlements:
+    posture_checks: true
+    usage_reports: basic
+    dedicated_ip: false
+  terms: "Internal pilot pricing, monthly in arrears, invoiced manually."

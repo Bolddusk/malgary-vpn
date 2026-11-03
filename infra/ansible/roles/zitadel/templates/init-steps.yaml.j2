@@ -1,0 +1,39 @@
+# First instance: Malgary admin organization. Owners and operators MUST use MFA (FR-029).
+# Keys verified against the v4 compose example during pilot test P-3.
+FirstInstance:
+  MachineKeyPath: /machinekey/malgary-backend.json
+  LoginClientPatPath: /machinekey/login-client.pat
+  Org:
+    Name: Malgary
+    Human:
+      UserName: {{ secrets.zitadel.first_admin_username }}
+      FirstName: Malgary
+      LastName: Owner
+      Email:
+        Address: {{ secrets.zitadel.first_admin_email }}
+        Verified: true
+      Password: "{{ secrets.zitadel.first_admin_password }}"
+      PasswordChangeRequired: true
+    Machine:
+      Machine:
+        Username: malgary-backend
+        Name: Malgary backend
+      MachineKey:
+        Type: 1
+    LoginClient:
+      Machine:
+        Username: login-client
+        Name: Malgary login client
+      Pat:
+        ExpirationDate: "2099-01-01T00:00:00Z"
+  LoginPolicy:
+    ForceMFA: true
+    ForceMFALocalOnly: false
+  SMTPConfiguration:
+    SMTP:
+      Host: {{ zitadel_smtp_host }}
+      User: "{{ secrets.email.smtp_user }}"
+      Password: "{{ secrets.email.smtp_password }}"
+    TLS: true
+    From: {{ zitadel_smtp_from }}
+    FromName: Malgary VPN

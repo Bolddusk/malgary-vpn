@@ -1,0 +1,19 @@
+# Managed by Ansible (role traefik).
+services:
+  traefik:
+    image: {{ traefik_image }}
+    network_mode: host
+    restart: unless-stopped
+    volumes:
+      - ./traefik.yml:/etc/traefik/traefik.yml:ro
+      - ./dynamic:/dynamic:ro
+      - ./acme:/acme
+
+  # Static per-tenant setup pages: /opt/malgary/setup-pages/<host>/index.html (T048, T049).
+  setup-pages:
+    image: nginx:1.29-alpine
+    restart: unless-stopped
+    ports: ["127.0.0.1:18100:80"]
+    volumes:
+      - /opt/malgary/setup-pages:/srv:ro
+      - ./setup-pages.conf:/etc/nginx/conf.d/default.conf:ro

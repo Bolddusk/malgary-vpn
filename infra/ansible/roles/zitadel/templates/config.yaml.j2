@@ -1,0 +1,20 @@
+# Managed by Ansible (role zitadel).
+ExternalDomain: {{ zitadel_domain }}
+ExternalPort: 443
+ExternalSecure: true
+TLS:
+  Enabled: false   # TLS ends at Traefik
+Database:
+  postgres:
+    Host: {{ private_ipv4 }}
+    Port: 5432
+    Database: zitadel
+    User:
+      Username: zitadel
+      Password: "{{ secrets.postgres.zitadel }}"
+      SSL: {Mode: disable}
+    Admin:
+      ExistingDatabase: zitadel
+      Username: zitadel
+      Password: "{{ secrets.postgres.zitadel }}"
+      SSL: {Mode: disable}

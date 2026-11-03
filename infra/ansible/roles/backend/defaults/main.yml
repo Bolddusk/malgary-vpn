@@ -1,0 +1,4 @@
+backend_bin_src: "{{ playbook_dir }}/../../backend/bin/malgaryd"
+backend_port: 18090
+backend_metrics_port: 9100
+backend_domain: "api.{{ dns_zone }}"

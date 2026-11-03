@@ -1,0 +1,30 @@
+# Managed by Ansible (role tenant-stack) from StackSpec {{ spec.hash }}. Do not edit.
+services:
+  netbird-server:
+    image: {{ netbird_server_image }}:{{ spec.netbirdVersion }}
+    restart: unless-stopped
+    command: ["--config", "/etc/netbird/config.yaml"]
+    environment:
+      # Lets malgaryd bootstrap the stack through /api/setup (tenancy/bootstrap.go).
+      NB_SETUP_PAT_ENABLED: "true"
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    ports:
+      - "127.0.0.1:{{ spec.httpPort }}:80"
+      - "{{ stun_port }}:{{ stun_port }}/udp"
+    volumes:
+      - data:/var/lib/netbird
+      - ./config.yaml:/etc/netbird/config.yaml:ro
+    logging:
+      driver: json-file
+      options: {max-size: "100m", max-file: "2"}
+
+  dashboard:
+    image: {{ netbird_dashboard_image }}:{{ netbird_dashboard_version }}
+    restart: unless-stopped
+    env_file: ./dashboard.env
+    ports:
+      - "127.0.0.1:{{ dashboard_port }}:80"
+
+volumes:
+  data:

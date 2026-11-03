@@ -1,0 +1,38 @@
+---
+- name: Zitadel directory
+  ansible.builtin.file: {path: "{{ zitadel_dir }}", state: directory, mode: "0700"}
+
+- name: Master key (from secrets, never generated on the host)
+  ansible.builtin.copy:
+    dest: "{{ zitadel_dir }}/masterkey"
+    content: "{{ secrets.zitadel.masterkey }}"
+    mode: "0600"
+  no_log: true
+
+- name: Configuration and first-instance setup
+  ansible.builtin.template:
+    src: "{{ item }}.j2"
+    dest: "{{ zitadel_dir }}/{{ item }}"
+    mode: "0600"
+  loop: [config.yaml, init-steps.yaml, compose.yaml]
+  no_log: true
+  notify: Restart zitadel
+
+- name: Start Zitadel
+  community.docker.docker_compose_v2:
+    project_src: "{{ zitadel_dir }}"
+    state: present
+
+- name: Traefik route for the sign-in domain
+  ansible.builtin.template:
+    src: traefik-zitadel.yml.j2
+    dest: "{{ traefik_dir }}/dynamic/zitadel.yml"
+    mode: "0640"
+
+- name: Copy the backend machine key into the secret store
+  ansible.builtin.copy:
+    remote_src: true
+    src: "{{ zitadel_dir }}/machinekey/malgary-backend.json"
+    dest: /etc/malgary/secrets/zitadel-machine-key.json
+    mode: "0600"
+  failed_when: false

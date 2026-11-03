@@ -1,0 +1,34 @@
+#!/usr/sbin/nft -f
+# Managed by Ansible (role base). Only replaces Malgary's own tables, so Docker's
+# iptables-nft rules survive a reload. Inbound default deny; the DO cloud firewall applies first.
+table inet malgary
+delete table inet malgary
+
+table inet malgary {
+  chain input {
+    type filter hook input priority 0; policy drop;
+    iif lo accept
+    ct state established,related accept
+    ct state invalid drop
+    ip protocol icmp accept
+    ip6 nexthdr ipv6-icmp accept
+    # Everything from the VPC, including SSH (reached via the malgary-ops tenant, research R13).
+    ip saddr {{ base_vpc_cidr }} accept
+{% if malgary_role == 'control' %}
+    tcp dport { 80, 443 } accept
+    udp dport 3478-4477 accept
+    # Containers (tenant stacks, Zitadel) reach PostgreSQL on the host.
+    iifname { "docker0", "br-*" } tcp dport 5432 accept
+{% endif %}
+{% if malgary_role == 'gateway' %}
+    udp dport {{ gateway_wg_port_min | default(51820) }}-{{ gateway_wg_port_max | default(52820) }} accept
+{% endif %}
+{% for rule in base_extra_nft_rules %}
+    {{ rule }}
+{% endfor %}
+  }
+}
+{% if malgary_role == 'gateway' %}
+
+include "/etc/nftables.d/*.nft"
+{% endif %}

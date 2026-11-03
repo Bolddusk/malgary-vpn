@@ -1,0 +1,15 @@
+# Free internal plan for the malgary-ops operator tenant (research R13). Never invoiced.
+code: internal-ops
+name: "Malgary operators (internal)"
+visibility: enterprise
+enterpriseTenant: malgary-ops
+publish: true
+version:
+  pricePerSeatMinor: 0
+  currency: USD
+  billingPeriod: monthly
+  minSeats: 1
+  maxSeats: 25
+  entitlements:
+    posture_checks: true
+  terms: "Internal use only."

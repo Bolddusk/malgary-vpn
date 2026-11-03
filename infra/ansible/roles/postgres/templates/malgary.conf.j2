@@ -1,0 +1,10 @@
+# Managed by Ansible (role postgres).
+# All interfaces: containers reach PostgreSQL via host.docker.internal. Access is limited by
+# pg_hba (scram) and the host nftables input chain (VPC and Docker bridges only).
+listen_addresses = '*'
+max_connections = {{ postgres_max_connections }}
+shared_buffers = {{ postgres_shared_buffers }}
+effective_cache_size = {{ postgres_effective_cache_size }}
+password_encryption = scram-sha-256
+log_min_duration_statement = 500ms
+log_connections = off

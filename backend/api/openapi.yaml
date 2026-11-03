@@ -1,0 +1,1186 @@
+openapi: 3.0.3
+info:
+  title: Malgary Backend API
+  version: 1.0.0
+  description: |
+    The Malgary backend API (specs/001-tier1-pilot/contracts/backend-api.md). Called by
+    `malgaryctl` in the pilot, and by the client portal and back-office from feature 002.
+
+    - Auth: OIDC bearer tokens issued by Malgary sign-in (Zitadel).
+    - Tenant admins can only reach their own tenant; any other tenant returns 404.
+    - Every POST accepts `Idempotency-Key`. Updates use `ETag` / `If-Match`.
+    - Errors are `application/problem+json` with a fixed `code`.
+servers:
+  - url: https://api.vpn.malgary.com/v1
+security:
+  - bearer: []
+
+paths:
+  /tenants:
+    get:
+      operationId: listTenants
+      summary: List tenants (owner, operator)
+      parameters:
+        - $ref: '#/components/parameters/Cursor'
+        - $ref: '#/components/parameters/Limit'
+      responses:
+        '200':
+          description: Tenants
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/TenantList'}
+        default: {$ref: '#/components/responses/Problem'}
+    post:
+      operationId: createTenant
+      summary: Create or update a tenant from a tenant definition (owner). Idempotent.
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/TenantDefinition'}
+      responses:
+        '201':
+          description: Tenant created; stack provisioning started
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/Tenant'}
+        '200':
+          description: Definition applied to an existing tenant (no-op if unchanged)
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/Tenant'}
+        default: {$ref: '#/components/responses/Problem'}
+
+  /tenants/{tenantId}:
+    parameters: [{$ref: '#/components/parameters/TenantId'}]
+    get:
+      operationId: getTenant
+      summary: Get a tenant with stack status and management URL
+      responses:
+        '200':
+          description: Tenant
+          headers:
+            ETag: {schema: {type: string}}
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/Tenant'}
+        default: {$ref: '#/components/responses/Problem'}
+
+  /tenants/{tenantId}:suspend:
+    parameters: [{$ref: '#/components/parameters/TenantId'}]
+    post:
+      operationId: suspendTenant
+      summary: Suspend a tenant (owner). Disables users, keeps data.
+      parameters: [{$ref: '#/components/parameters/IdempotencyKey'}]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/Reason'}
+      responses:
+        '200':
+          description: Suspended
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/Tenant'}
+        default: {$ref: '#/components/responses/Problem'}
+
+  /tenants/{tenantId}:resume:
+    parameters: [{$ref: '#/components/parameters/TenantId'}]
+    post:
+      operationId: resumeTenant
+      summary: Resume a suspended tenant (owner)
+      parameters: [{$ref: '#/components/parameters/IdempotencyKey'}]
+      responses:
+        '200':
+          description: Active again
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/Tenant'}
+        default: {$ref: '#/components/responses/Problem'}
+
+  /tenants/{tenantId}/identity:
+    parameters: [{$ref: '#/components/parameters/TenantId'}]
+    get:
+      operationId: getIdentity
+      summary: Get sign-in settings
+      responses:
+        '200':
+          description: Identity settings
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/Identity'}
+        default: {$ref: '#/components/responses/Problem'}
+    put:
+      operationId: putIdentity
+      summary: Set sign-in methods, upstream IdPs, allowed domains and MFA (FR-002, FR-003, FR-013)
+      parameters: [{$ref: '#/components/parameters/IfMatch'}]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/Identity'}
+      responses:
+        '200':
+          description: Updated
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/Identity'}
+        default: {$ref: '#/components/responses/Problem'}
+
+  /tenants/{tenantId}/users:
+    parameters: [{$ref: '#/components/parameters/TenantId'}]
+    get:
+      operationId: listUsers
+      summary: Users with status, last seen, connected and device count
+      parameters:
+        - $ref: '#/components/parameters/Cursor'
+        - $ref: '#/components/parameters/Limit'
+      responses:
+        '200':
+          description: Users
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/UserList'}
+        default: {$ref: '#/components/responses/Problem'}
+
+  /tenants/{tenantId}/users:import:
+    parameters: [{$ref: '#/components/parameters/TenantId'}]
+    post:
+      operationId: importUsers
+      summary: Bulk import users and send invitations. Refused past the seat limit (FR-016).
+      parameters: [{$ref: '#/components/parameters/IdempotencyKey'}]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [users]
+              properties:
+                users:
+                  type: array
+                  maxItems: 5000
+                  items: {$ref: '#/components/schemas/UserImport'}
+      responses:
+        '200':
+          description: Import result
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/ImportResult'}
+        default: {$ref: '#/components/responses/Problem'}
+
+  /tenants/{tenantId}/users/{userId}:
+    parameters:
+      - $ref: '#/components/parameters/TenantId'
+      - $ref: '#/components/parameters/UserId'
+    patch:
+      operationId: patchUser
+      summary: Disable, enable, change role or groups
+      parameters: [{$ref: '#/components/parameters/IfMatch'}]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/UserPatch'}
+      responses:
+        '200':
+          description: Updated
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/User'}
+        default: {$ref: '#/components/responses/Problem'}
+    delete:
+      operationId: deleteUser
+      summary: Remove a user and free the seat
+      responses:
+        '204': {description: Removed}
+        default: {$ref: '#/components/responses/Problem'}
+
+  /tenants/{tenantId}/groups:
+    parameters: [{$ref: '#/components/parameters/TenantId'}]
+    get:
+      operationId: listGroups
+      summary: List groups
+      responses:
+        '200':
+          description: Groups
+          content:
+            application/json:
+              schema:
+                type: array
+                items: {$ref: '#/components/schemas/Group'}
+        default: {$ref: '#/components/responses/Problem'}
+    post:
+      operationId: createGroup
+      summary: Create a group
+      parameters: [{$ref: '#/components/parameters/IdempotencyKey'}]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/GroupInput'}
+      responses:
+        '201':
+          description: Created
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/Group'}
+        default: {$ref: '#/components/responses/Problem'}
+
+  /tenants/{tenantId}/groups/{groupId}:
+    parameters:
+      - $ref: '#/components/parameters/TenantId'
+      - name: groupId
+        in: path
+        required: true
+        schema: {type: string, format: uuid}
+    patch:
+      operationId: patchGroup
+      summary: Rename a group or change members
+      parameters: [{$ref: '#/components/parameters/IfMatch'}]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/GroupInput'}
+      responses:
+        '200':
+          description: Updated
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/Group'}
+        default: {$ref: '#/components/responses/Problem'}
+    delete:
+      operationId: deleteGroup
+      summary: Delete a group
+      responses:
+        '204': {description: Deleted}
+        default: {$ref: '#/components/responses/Problem'}
+
+  /tenants/{tenantId}/routing-rules:
+    parameters: [{$ref: '#/components/parameters/TenantId'}]
+    get:
+      operationId: getRoutingRules
+      summary: Rules at tenant, group and user level, each user's effective rule and conflicts (FR-005)
+      responses:
+        '200':
+          description: Routing rules
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/RoutingRules'}
+        default: {$ref: '#/components/responses/Problem'}
+    put:
+      operationId: putRoutingRules
+      summary: Replace routing rules. Empty destination lists are rejected (422).
+      parameters: [{$ref: '#/components/parameters/IfMatch'}]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [rules]
+              properties:
+                rules:
+                  type: array
+                  items: {$ref: '#/components/schemas/RoutingRule'}
+                callExclusions:
+                  type: array
+                  items: {type: string}
+      responses:
+        '200':
+          description: Applied
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/RoutingRules'}
+        default: {$ref: '#/components/responses/Problem'}
+
+  /tenants/{tenantId}/posture-rules:
+    parameters: [{$ref: '#/components/parameters/TenantId'}]
+    get:
+      operationId: getPostureRules
+      summary: Posture rules (FR-018)
+      responses:
+        '200':
+          description: Posture rules
+          content:
+            application/json:
+              schema:
+                type: array
+                items: {$ref: '#/components/schemas/PostureRule'}
+        default: {$ref: '#/components/responses/Problem'}
+    put:
+      operationId: putPostureRules
+      summary: Replace posture rules. Needs the posture_checks entitlement.
+      parameters: [{$ref: '#/components/parameters/IfMatch'}]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: array
+              items: {$ref: '#/components/schemas/PostureRule'}
+      responses:
+        '200':
+          description: Applied
+          content:
+            application/json:
+              schema:
+                type: array
+                items: {$ref: '#/components/schemas/PostureRule'}
+        default: {$ref: '#/components/responses/Problem'}
+
+  /tenants/{tenantId}/usage:
+    parameters: [{$ref: '#/components/parameters/TenantId'}]
+    get:
+      operationId: getUsage
+      summary: Per-user connection status, last seen and bytes; never-installed and inactive lists
+      parameters:
+        - {name: from, in: query, schema: {type: string, format: date-time}}
+        - {name: to, in: query, schema: {type: string, format: date-time}}
+        - {name: group, in: query, schema: {type: string, format: uuid}}
+      responses:
+        '200':
+          description: Usage
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/Usage'}
+        default: {$ref: '#/components/responses/Problem'}
+
+  /tenants/{tenantId}/audit:
+    parameters: [{$ref: '#/components/parameters/TenantId'}]
+    get:
+      operationId: listAudit
+      summary: Audit records for the tenant (FR-026)
+      parameters:
+        - $ref: '#/components/parameters/Cursor'
+        - $ref: '#/components/parameters/Limit'
+      responses:
+        '200':
+          description: Audit records
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/AuditList'}
+        default: {$ref: '#/components/responses/Problem'}
+
+  /tenants/{tenantId}/subscription:
+    parameters: [{$ref: '#/components/parameters/TenantId'}]
+    get:
+      operationId: getSubscription
+      summary: Current subscription
+      responses:
+        '200':
+          description: Subscription
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/Subscription'}
+        default: {$ref: '#/components/responses/Problem'}
+    post:
+      operationId: createSubscription
+      summary: Subscribe the tenant to a pinned plan version (owner, FR-016a)
+      parameters: [{$ref: '#/components/parameters/IdempotencyKey'}]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/SubscriptionInput'}
+      responses:
+        '201':
+          description: Subscribed
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/Subscription'}
+        default: {$ref: '#/components/responses/Problem'}
+
+  /tenants/{tenantId}/subscription:change:
+    parameters: [{$ref: '#/components/parameters/TenantId'}]
+    post:
+      operationId: changeSubscription
+      summary: Change quantity or migrate plan version, with a reason (owner, FR-016b)
+      parameters: [{$ref: '#/components/parameters/IdempotencyKey'}]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/SubscriptionChange'}
+      responses:
+        '200':
+          description: Changed
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/Subscription'}
+        default: {$ref: '#/components/responses/Problem'}
+
+  /tenants/{tenantId}/subscription/history:
+    parameters: [{$ref: '#/components/parameters/TenantId'}]
+    get:
+      operationId: getSubscriptionHistory
+      summary: Subscription events
+      responses:
+        '200':
+          description: Events
+          content:
+            application/json:
+              schema:
+                type: array
+                items: {$ref: '#/components/schemas/SubscriptionEvent'}
+        default: {$ref: '#/components/responses/Problem'}
+
+  /tenants/{tenantId}/invoices:
+    parameters: [{$ref: '#/components/parameters/TenantId'}]
+    get:
+      operationId: listInvoices
+      summary: Invoices for the tenant
+      responses:
+        '200':
+          description: Invoices
+          content:
+            application/json:
+              schema:
+                type: array
+                items: {$ref: '#/components/schemas/Invoice'}
+        default: {$ref: '#/components/responses/Problem'}
+    post:
+      operationId: draftInvoice
+      summary: Draft an invoice for a subscription period (owner)
+      parameters: [{$ref: '#/components/parameters/IdempotencyKey'}]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [periodStart]
+              properties:
+                periodStart: {type: string, format: date}
+      responses:
+        '201':
+          description: Draft created
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/Invoice'}
+        default: {$ref: '#/components/responses/Problem'}
+
+  /invoices/{invoiceId}:issue:
+    parameters: [{$ref: '#/components/parameters/InvoiceId'}]
+    post:
+      operationId: issueInvoice
+      summary: Issue a draft invoice. Assigns the number; the invoice becomes immutable.
+      parameters: [{$ref: '#/components/parameters/IdempotencyKey'}]
+      responses:
+        '200':
+          description: Issued
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/Invoice'}
+        default: {$ref: '#/components/responses/Problem'}
+
+  /invoices/{invoiceId}/payments:
+    parameters: [{$ref: '#/components/parameters/InvoiceId'}]
+    post:
+      operationId: recordPayment
+      summary: Record a manual payment with reference and optional proof (owner, FR-016c)
+      parameters: [{$ref: '#/components/parameters/IdempotencyKey'}]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/PaymentInput'}
+      responses:
+        '201':
+          description: Recorded
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/Payment'}
+        default: {$ref: '#/components/responses/Problem'}
+
+  /plans:
+    get:
+      operationId: listPlans
+      summary: Plans with their versions (owner)
+      responses:
+        '200':
+          description: Plans
+          content:
+            application/json:
+              schema:
+                type: array
+                items: {$ref: '#/components/schemas/Plan'}
+        default: {$ref: '#/components/responses/Problem'}
+    post:
+      operationId: createPlan
+      summary: Create a plan (owner)
+      parameters: [{$ref: '#/components/parameters/IdempotencyKey'}]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/PlanInput'}
+      responses:
+        '201':
+          description: Created
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/Plan'}
+        default: {$ref: '#/components/responses/Problem'}
+
+  /plans/{planId}/versions:
+    parameters: [{$ref: '#/components/parameters/PlanId'}]
+    post:
+      operationId: draftPlanVersion
+      summary: Draft a new plan version (owner)
+      parameters: [{$ref: '#/components/parameters/IdempotencyKey'}]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/PlanVersionInput'}
+      responses:
+        '201':
+          description: Draft created
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/PlanVersion'}
+        default: {$ref: '#/components/responses/Problem'}
+
+  /plans/{planId}/versions/{version}:publish:
+    parameters:
+      - $ref: '#/components/parameters/PlanId'
+      - {name: version, in: path, required: true, schema: {type: integer, minimum: 1}}
+    post:
+      operationId: publishPlanVersion
+      summary: Publish a draft version. The previous published version becomes superseded.
+      parameters: [{$ref: '#/components/parameters/IdempotencyKey'}]
+      responses:
+        '200':
+          description: Published
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/PlanVersion'}
+        default: {$ref: '#/components/responses/Problem'}
+
+  /providers/{provider}/webhooks:
+    parameters:
+      - {name: provider, in: path, required: true, schema: {type: string}}
+    post:
+      operationId: providerWebhook
+      summary: Payment provider webhook. Signature-verified, stored idempotently. 404 for manual.
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {type: object, additionalProperties: true}
+      responses:
+        '204': {description: Accepted}
+        default: {$ref: '#/components/responses/Problem'}
+
+  /cells:
+    get:
+      operationId: listCells
+      summary: Cells (owner, operator)
+      responses:
+        '200':
+          description: Cells
+          content:
+            application/json:
+              schema:
+                type: array
+                items: {$ref: '#/components/schemas/Cell'}
+        default: {$ref: '#/components/responses/Problem'}
+
+  /cells/{cellId}/capacity:
+    parameters:
+      - {name: cellId, in: path, required: true, schema: {type: string, format: uuid}}
+    get:
+      operationId: getCellCapacity
+      summary: Users placed against capacity, per host
+      responses:
+        '200':
+          description: Capacity
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/CellCapacity'}
+        default: {$ref: '#/components/responses/Problem'}
+
+  /gateway-pairs/{name}:pta:
+    parameters:
+      - {name: name, in: path, required: true, schema: {type: string}}
+    post:
+      operationId: markGatewayPairPTA
+      summary: Record PTA registration of a pair's egress IP (owner, FR-011)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [registeredAt, reference]
+              properties:
+                registeredAt: {type: string, format: date-time}
+                reference: {type: string, minLength: 1}
+      responses:
+        '200': {description: Recorded}
+        default: {$ref: '#/components/responses/Problem'}
+
+  /tenants/{tenantId}/stack:reconcile:
+    parameters: [{$ref: '#/components/parameters/TenantId'}]
+    post:
+      operationId: reconcileStack
+      summary: Force a reconcile run (operator)
+      responses:
+        '202': {description: Started}
+        default: {$ref: '#/components/responses/Problem'}
+
+  /tenants/{tenantId}/stack:report:
+    parameters: [{$ref: '#/components/parameters/TenantId'}]
+    post:
+      operationId: reportStack
+      summary: Deployer reports applied hash and component health (contracts/tenant-stack.md)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/StackReport'}
+      responses:
+        '204': {description: Recorded}
+        default: {$ref: '#/components/responses/Problem'}
+
+components:
+  securitySchemes:
+    bearer:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+
+  parameters:
+    TenantId: {name: tenantId, in: path, required: true, schema: {type: string, format: uuid}}
+    UserId: {name: userId, in: path, required: true, schema: {type: string, format: uuid}}
+    PlanId: {name: planId, in: path, required: true, schema: {type: string, format: uuid}}
+    InvoiceId: {name: invoiceId, in: path, required: true, schema: {type: string, format: uuid}}
+    IdempotencyKey: {name: Idempotency-Key, in: header, required: false, schema: {type: string, maxLength: 128}}
+    IfMatch: {name: If-Match, in: header, required: false, schema: {type: string}}
+    Cursor: {name: cursor, in: query, required: false, schema: {type: string}}
+    Limit: {name: limit, in: query, required: false, schema: {type: integer, minimum: 1, maximum: 200, default: 50}}
+
+  responses:
+    Problem:
+      description: Error
+      content:
+        application/problem+json:
+          schema: {$ref: '#/components/schemas/Problem'}
+
+  schemas:
+    Problem:
+      type: object
+      required: [type, title, status, code]
+      properties:
+        type: {type: string}
+        title: {type: string}
+        status: {type: integer}
+        detail: {type: string}
+        code:
+          type: string
+          enum: [seat_limit_reached, plan_version_immutable, entitlement_missing,
+                 routing_rule_empty_destinations, tenant_suspended, idempotency_conflict,
+                 stack_not_ready, not_found, invalid_request, unauthorized, precondition_failed,
+                 gateway_not_pta_registered, internal]
+
+    Reason:
+      type: object
+      required: [reason]
+      properties:
+        reason: {type: string, minLength: 3}
+
+    TenantDefinition:
+      description: contracts/tenant-definition.md, as JSON
+      type: object
+      additionalProperties: false
+      required: [apiVersion, kind, metadata, spec]
+      properties:
+        apiVersion: {type: string, enum: [malgary.io/v1]}
+        kind: {type: string, enum: [Tenant]}
+        metadata:
+          type: object
+          additionalProperties: false
+          required: [slug, legalName]
+          properties:
+            slug: {type: string, pattern: '^[a-z][a-z0-9-]{1,30}[a-z0-9]$'}
+            legalName: {type: string, minLength: 1}
+        spec:
+          type: object
+          additionalProperties: false
+          required: [identity, subscription, gateways, routing]
+          properties:
+            cell: {type: string}
+            identity: {$ref: '#/components/schemas/Identity'}
+            subscription:
+              type: object
+              additionalProperties: false
+              required: [plan, planVersion, quantity, paymentProvider]
+              properties:
+                plan: {type: string}
+                planVersion: {type: integer, minimum: 1}
+                quantity: {type: integer, minimum: 1}
+                paymentProvider: {type: string}
+            gateways:
+              type: array
+              minItems: 1
+              items:
+                type: object
+                additionalProperties: false
+                required: [pair]
+                properties:
+                  pair: {type: string}
+            routing:
+              type: object
+              additionalProperties: false
+              required: [default]
+              properties:
+                default: {$ref: '#/components/schemas/RoutingTarget'}
+                callExclusions:
+                  type: array
+                  items: {type: string}
+            posture: {$ref: '#/components/schemas/PostureSpec'}
+            admins:
+              type: array
+              items:
+                type: object
+                additionalProperties: false
+                required: [email]
+                properties:
+                  email: {type: string, format: email}
+
+    Tenant:
+      type: object
+      required: [id, slug, legalName, status, cell, managementUrl, stackStatus]
+      properties:
+        id: {type: string, format: uuid}
+        slug: {type: string}
+        legalName: {type: string}
+        status: {type: string, enum: [provisioning, active, suspended, offboarding, deleted]}
+        cell: {type: string}
+        managementUrl: {type: string}
+        setupUrl: {type: string}
+        stackStatus: {type: string, enum: [pending, applied, failed]}
+        netbirdVersion: {type: string}
+        createdAt: {type: string, format: date-time}
+
+    TenantList:
+      type: object
+      required: [items]
+      properties:
+        items:
+          type: array
+          items: {$ref: '#/components/schemas/Tenant'}
+        nextCursor: {type: string}
+
+    Identity:
+      type: object
+      additionalProperties: false
+      required: [signInMethods]
+      properties:
+        signInMethods:
+          type: array
+          minItems: 1
+          items: {type: string, enum: [sso, managed]}
+        upstreamIdps:
+          type: array
+          items: {$ref: '#/components/schemas/UpstreamIdp'}
+        allowedDomains:
+          type: array
+          items: {type: string}
+        allowedEmails:
+          type: array
+          items: {type: string, format: email}
+        mfaRequired: {type: boolean, default: true}
+
+    UpstreamIdp:
+      type: object
+      additionalProperties: false
+      required: [type]
+      properties:
+        type: {type: string, enum: [google, entra, oidc]}
+        hostedDomain: {type: string}
+        entraTenantId: {type: string}
+        issuer: {type: string}
+        clientId: {type: string}
+        clientSecretRef: {type: string, description: 'secret:// reference, never the value'}
+
+    UserImport:
+      type: object
+      required: [email]
+      properties:
+        email: {type: string, format: email}
+        name: {type: string}
+        role: {type: string, enum: [member, tenant_admin], default: member}
+        groups:
+          type: array
+          items: {type: string}
+
+    ImportResult:
+      type: object
+      required: [created, existing, seatsUsed, seatsPaid]
+      properties:
+        created: {type: integer}
+        existing: {type: integer}
+        seatsUsed: {type: integer}
+        seatsPaid: {type: integer}
+
+    User:
+      type: object
+      required: [id, email, role, status]
+      properties:
+        id: {type: string, format: uuid}
+        email: {type: string}
+        name: {type: string}
+        role: {type: string, enum: [member, tenant_admin]}
+        status: {type: string, enum: [invited, active, disabled, removed]}
+        groups:
+          type: array
+          items: {type: string}
+        connected: {type: boolean}
+        lastSeen: {type: string, format: date-time}
+        devices: {type: integer}
+
+    UserList:
+      type: object
+      required: [items]
+      properties:
+        items:
+          type: array
+          items: {$ref: '#/components/schemas/User'}
+        nextCursor: {type: string}
+
+    UserPatch:
+      type: object
+      additionalProperties: false
+      properties:
+        status: {type: string, enum: [active, disabled]}
+        role: {type: string, enum: [member, tenant_admin]}
+        groups:
+          type: array
+          items: {type: string}
+
+    Group:
+      type: object
+      required: [id, name, kind]
+      properties:
+        id: {type: string, format: uuid}
+        name: {type: string}
+        kind: {type: string, enum: [team, system]}
+        members: {type: integer}
+
+    GroupInput:
+      type: object
+      additionalProperties: false
+      properties:
+        name: {type: string, minLength: 1, maxLength: 64}
+        memberEmails:
+          type: array
+          items: {type: string, format: email}
+
+    RoutingTarget:
+      type: object
+      additionalProperties: false
+      required: [mode]
+      properties:
+        mode: {type: string, enum: [full_tunnel, destinations]}
+        destinations:
+          type: array
+          items: {type: string}
+
+    RoutingRule:
+      type: object
+      required: [scope, mode]
+      properties:
+        scope: {type: string, enum: [tenant, group, user]}
+        scopeRef: {type: string, format: uuid, description: 'group or user id; absent for tenant'}
+        mode: {type: string, enum: [full_tunnel, destinations]}
+        destinations:
+          type: array
+          items: {type: string}
+
+    RoutingRules:
+      type: object
+      required: [rules, effective]
+      properties:
+        rules:
+          type: array
+          items: {$ref: '#/components/schemas/RoutingRule'}
+        callExclusions:
+          type: array
+          items: {type: string}
+        effective:
+          type: array
+          items:
+            type: object
+            required: [userId, mode]
+            properties:
+              userId: {type: string, format: uuid}
+              mode: {type: string, enum: [full_tunnel, destinations]}
+              destinations:
+                type: array
+                items: {type: string}
+              source: {type: string, enum: [user, group, tenant]}
+              conflict: {type: boolean}
+
+    PostureSpec:
+      type: object
+      additionalProperties: false
+      properties:
+        minClientVersion: {type: string}
+        minOs:
+          type: object
+          additionalProperties: {type: string}
+
+    PostureRule:
+      type: object
+      properties:
+        id: {type: string, format: uuid}
+        groupId: {type: string, format: uuid}
+        minClientVersion: {type: string}
+        minOs:
+          type: object
+          additionalProperties: {type: string}
+
+    Usage:
+      type: object
+      required: [users, neverInstalled, inactive30d]
+      properties:
+        users:
+          type: array
+          items:
+            type: object
+            required: [userId, email]
+            properties:
+              userId: {type: string, format: uuid}
+              email: {type: string}
+              connected: {type: boolean}
+              lastSeen: {type: string, format: date-time}
+              rxBytes: {type: integer, format: int64}
+              txBytes: {type: integer, format: int64}
+        neverInstalled:
+          type: array
+          items: {type: string}
+        inactive30d:
+          type: array
+          items: {type: string}
+
+    AuditRecord:
+      type: object
+      required: [id, at, actorType, actorId, action, targetType, targetId]
+      properties:
+        id: {type: string, format: uuid}
+        at: {type: string, format: date-time}
+        actorType: {type: string}
+        actorId: {type: string}
+        action: {type: string}
+        targetType: {type: string}
+        targetId: {type: string}
+        before: {type: object, additionalProperties: true}
+        after: {type: object, additionalProperties: true}
+
+    AuditList:
+      type: object
+      required: [items]
+      properties:
+        items:
+          type: array
+          items: {$ref: '#/components/schemas/AuditRecord'}
+        nextCursor: {type: string}
+
+    Money:
+      type: object
+      required: [amountMinor, currency]
+      properties:
+        amountMinor: {type: integer, format: int64}
+        currency: {type: string, pattern: '^[A-Z]{3}$'}
+
+    PlanInput:
+      type: object
+      additionalProperties: false
+      required: [code, name, visibility]
+      properties:
+        code: {type: string, pattern: '^[a-z][a-z0-9-]{1,40}$'}
+        name: {type: string}
+        visibility: {type: string, enum: [public, enterprise]}
+        enterpriseTenantSlug: {type: string}
+
+    Plan:
+      type: object
+      required: [id, code, name, visibility, status, versions]
+      properties:
+        id: {type: string, format: uuid}
+        code: {type: string}
+        name: {type: string}
+        visibility: {type: string, enum: [public, enterprise]}
+        enterpriseTenantSlug: {type: string}
+        status: {type: string, enum: [active, retired]}
+        versions:
+          type: array
+          items: {$ref: '#/components/schemas/PlanVersion'}
+
+    PlanVersionInput:
+      type: object
+      additionalProperties: false
+      required: [pricePerSeatMinor, currency, billingPeriod, minSeats, entitlements]
+      properties:
+        pricePerSeatMinor: {type: integer, format: int64, minimum: 0}
+        currency: {type: string, pattern: '^[A-Z]{3}$'}
+        billingPeriod: {type: string, enum: [monthly, annual]}
+        minSeats: {type: integer, minimum: 1}
+        maxSeats: {type: integer, minimum: 1}
+        entitlements: {type: object, additionalProperties: true}
+        terms: {type: string}
+
+    PlanVersion:
+      allOf:
+        - $ref: '#/components/schemas/PlanVersionInput'
+        - type: object
+          required: [id, version, status]
+          properties:
+            id: {type: string, format: uuid}
+            version: {type: integer}
+            status: {type: string, enum: [draft, published, superseded]}
+            publishedAt: {type: string, format: date-time}
+
+    SubscriptionInput:
+      type: object
+      additionalProperties: false
+      required: [planCode, planVersion, quantity, paymentProvider]
+      properties:
+        planCode: {type: string}
+        planVersion: {type: integer, minimum: 1}
+        quantity: {type: integer, minimum: 1}
+        paymentProvider: {type: string, default: manual}
+        periodStart: {type: string, format: date}
+
+    SubscriptionChange:
+      type: object
+      additionalProperties: false
+      required: [reason]
+      properties:
+        quantity: {type: integer, minimum: 1}
+        planCode: {type: string}
+        planVersion: {type: integer, minimum: 1}
+        reason: {type: string, minLength: 3}
+
+    Subscription:
+      type: object
+      required: [id, planCode, planVersion, quantity, status, paymentProvider]
+      properties:
+        id: {type: string, format: uuid}
+        planCode: {type: string}
+        planVersion: {type: integer}
+        quantity: {type: integer}
+        status: {type: string, enum: [trialing, active, past_due, suspended, cancelled]}
+        paymentProvider: {type: string}
+        currentPeriodStart: {type: string, format: date}
+        currentPeriodEnd: {type: string, format: date}
+        entitlements: {type: object, additionalProperties: true}
+
+    SubscriptionEvent:
+      type: object
+      required: [id, type, at, actor]
+      properties:
+        id: {type: string, format: uuid}
+        type: {type: string}
+        fromValue: {type: object, additionalProperties: true}
+        toValue: {type: object, additionalProperties: true}
+        actor: {type: string}
+        reason: {type: string}
+        at: {type: string, format: date-time}
+
+    Invoice:
+      type: object
+      required: [id, status, currency, totalMinor, lines]
+      properties:
+        id: {type: string, format: uuid}
+        number: {type: string}
+        status: {type: string, enum: [draft, issued, paid, void]}
+        periodStart: {type: string, format: date}
+        periodEnd: {type: string, format: date}
+        currency: {type: string}
+        subtotalMinor: {type: integer, format: int64}
+        taxMinor: {type: integer, format: int64}
+        totalMinor: {type: integer, format: int64}
+        paidMinor: {type: integer, format: int64}
+        issuedAt: {type: string, format: date-time}
+        dueAt: {type: string, format: date-time}
+        lines:
+          type: array
+          items:
+            type: object
+            properties:
+              description: {type: string}
+              quantity: {type: integer}
+              unitPriceMinor: {type: integer, format: int64}
+              amountMinor: {type: integer, format: int64}
+
+    PaymentInput:
+      type: object
+      additionalProperties: false
+      required: [amountMinor, currency, receivedAt, reference]
+      properties:
+        amountMinor: {type: integer, format: int64, minimum: 1}
+        currency: {type: string, pattern: '^[A-Z]{3}$'}
+        receivedAt: {type: string, format: date-time}
+        reference: {type: string, minLength: 1}
+        methodNote: {type: string}
+        proofBase64: {type: string, description: 'optional proof file, stored in Spaces'}
+        proofFilename: {type: string}
+
+    Payment:
+      type: object
+      required: [id, invoiceId, provider, amountMinor, currency, receivedAt]
+      properties:
+        id: {type: string, format: uuid}
+        invoiceId: {type: string, format: uuid}
+        provider: {type: string}
+        providerPaymentRef: {type: string}
+        amountMinor: {type: integer, format: int64}
+        currency: {type: string}
+        receivedAt: {type: string, format: date-time}
+        proofObjectKey: {type: string}
+
+    Cell:
+      type: object
+      required: [id, code, region, status, maxUsers]
+      properties:
+        id: {type: string, format: uuid}
+        code: {type: string}
+        region: {type: string}
+        status: {type: string}
+        maxUsers: {type: integer}
+
+    CellCapacity:
+      type: object
+      required: [cell, usersPlaced, maxUsers, hosts]
+      properties:
+        cell: {type: string}
+        usersPlaced: {type: integer}
+        maxUsers: {type: integer}
+        hosts:
+          type: array
+          items:
+            type: object
+            properties:
+              name: {type: string}
+              role: {type: string}
+              usersPlaced: {type: integer}
+              maxUsers: {type: integer}
+
+    StackReport:
+      type: object
+      required: [appliedHash, status]
+      properties:
+        appliedHash: {type: string}
+        status: {type: string, enum: [applied, failed]}
+        components:
+          type: object
+          additionalProperties: {type: string}
+        message: {type: string}
