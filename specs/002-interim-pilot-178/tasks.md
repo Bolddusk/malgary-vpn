@@ -192,7 +192,7 @@ and a test user connects from the setup page.
   `interim_alloy` (T046). Writes a firewall snapshot before and after (T037).
 - [X] T033 🖥 [US1] Run `interim-check.yml` on 178 and update [research.md](research.md) with any
   fact that differs (owner go-ahead).
-- [ ] T034 🖥 [US1] Run `interim-site.yml`, apply the plans and the `testco` tenant, and walk
+- [ ] T034 🖥 [US1] (install done 2026-11-03, see docs/ops/178-ops-log.md) Run `interim-site.yml`, apply the plans and the `testco` tenant, and walk
   quickstart V1, V2 and V9a with one test user (owner go-ahead; needs the Google OAuth
   client).
 
