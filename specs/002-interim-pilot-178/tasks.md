@@ -272,7 +272,7 @@ access.
 - [X] T046 [P] [US3] Role `infra/ansible/roles/interim_alloy/` (optional, runs only when Grafana
   Cloud credentials are set): Alloy container, 128 MB, scraping malgaryd, guards and NetBird
   metrics.
-- [ ] T047 🖥 [US3] Build the guard and probe images on 178, redeploy `testco`, run
+- [X] T047 🖥 [US3] Build the guard and probe images on 178, redeploy `testco`, run
   `malgaryctl isolation-test testco` (V5), then change the stack and confirm users are blocked
   until a new pass (V6). Owner go-ahead.
 
