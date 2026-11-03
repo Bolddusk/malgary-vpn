@@ -33,12 +33,14 @@
     if [ -s "$f" ]; then echo exists; exit 0; fi
     umask 077
     head -c 256 /dev/urandom | tr -dc 'A-Za-z0-9' | head -c {{ item.length }} > "$f"
+    printf '%s' '{{ item.suffix | default('') }}' >> "$f"
     echo created
   args: {executable: /bin/bash}
   loop:
     - {name: zitadel-masterkey, length: 32}
     - {name: zitadel-db-password, length: 32}
-    - {name: zitadel-first-admin-password, length: 24}
+    # Zitadel's password policy needs a symbol, a digit, upper and lower case letters.
+    - {name: zitadel-first-admin-password, length: 24, suffix: "#Mv9"}
     - {name: malgary-owner-db-password, length: 32}
     - {name: malgary-app-db-password, length: 32}
     - {name: zitadel-claims-signing-key, length: 48}

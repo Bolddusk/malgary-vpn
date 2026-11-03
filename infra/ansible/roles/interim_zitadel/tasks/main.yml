@@ -41,7 +41,9 @@
 
 - name: Start or update Zitadel
   ansible.builtin.command:
-    cmd: docker compose -p malgary-id up -d --remove-orphans
+    # Recreate on config changes: a restart keeps the old bind-mounted file (template replaces
+    # the file, the container still sees the previous inode).
+    cmd: docker compose -p malgary-id up -d --remove-orphans {{ '--force-recreate' if zfiles is changed else '' }}
     chdir: "{{ interim_root }}/platform/zitadel"
   register: zup
   changed_when: "'Started' in zup.stderr or 'Recreated' in zup.stderr or 'Created' in zup.stderr"
