@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"log/slog"
+	"maps"
 	"net/http"
 	"reflect"
 	"slices"
@@ -144,19 +145,28 @@ func (s *Service) placeRoutingPeers(ctx context.Context, q *db.Queries, t db.Ten
 	if pair.CellID != t.CellID {
 		return httpapi.Errf(http.StatusUnprocessableEntity, gen.InvalidRequest, "gateway pair "+pairName+" is not in the tenant's cell")
 	}
-	if pair.PtaRegisteredAt == nil {
+	cell, err := q.GetCell(ctx, pair.CellID)
+	if err != nil {
+		return err
+	}
+	// The interim egress IP is temporary and never PTA-registered (Interim Hosting Exception).
+	if pair.PtaRegisteredAt == nil && !cell.Interim {
 		return httpapi.Errf(http.StatusUnprocessableEntity, gen.GatewayNotPtaRegistered,
 			"egress IP of "+pairName+" is not PTA-registered yet (malgaryctl gateway mark-pta-registered)")
 	}
 	if pair.DedicatedTenantID != nil && *pair.DedicatedTenantID != t.ID {
 		return httpapi.Errf(http.StatusUnprocessableEntity, gen.InvalidRequest, "gateway pair "+pairName+" is dedicated to another tenant")
 	}
-	port, err := allocWGPort(ctx, q, pair.PrimaryHostID, pair.StandbyHostID)
+	members := map[uuid.UUID]int32{pair.PrimaryHostID: 100}
+	if pair.StandbyHostID != nil {
+		members[*pair.StandbyHostID] = 200
+	}
+	port, err := allocWGPort(ctx, q, slices.Collect(maps.Keys(members))...)
 	if err != nil {
 		return err
 	}
 	iface := wgInterfaceName(t.Slug)
-	for host, metric := range map[uuid.UUID]int32{pair.PrimaryHostID: 100, pair.StandbyHostID: 200} {
+	for host, metric := range members {
 		if _, err := q.CreateRoutingPeer(ctx, db.CreateRoutingPeerParams{
 			ID: uuid.Must(uuid.NewV7()), TenantID: t.ID, GatewayPairID: pair.ID, HostID: host,
 			WgInterface: iface, WgPort: port, Metric: metric,

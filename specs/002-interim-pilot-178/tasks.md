@@ -35,7 +35,7 @@ first. Everything else is code in this repository.
 
 **Purpose**: configuration and scaffolding shared by every story.
 
-- [ ] T001 Add interim and compose settings to `backend/internal/config/config.go`: `Interim`
+- [X] T001 Add interim and compose settings to `backend/internal/config/config.go`: `Interim`
   (`MALGARY_INTERIM`, bool), `InterimMaxUsers` (`MALGARY_INTERIM_MAX_USERS`, default 10),
   `InterimUntil` (`MALGARY_INTERIM_UNTIL`, date, required when interim), `InterimTestTenants`
   and `InterimTestDomains` (comma lists), `InterimEgressNote`, `InviteDelivery`
@@ -46,11 +46,11 @@ first. Everything else is code in this repository.
   `MALGARY_GW_NETWORK`, `MALGARY_HOST_PUBLIC_IP`, `MALGARY_STACK_DIR` default
   `/opt/malgary/stacks`, `MALGARY_OPERATOR_ALLOWLIST`). Validate: unknown enum values and a
   missing `InterimUntil` while interim is on are errors.
-- [ ] T002 [P] Unit tests for the new settings in `backend/internal/config/config_test.go`
+- [X] T002 [P] Unit tests for the new settings in `backend/internal/config/config_test.go`
   (defaults, enum validation, interim requires an end date).
-- [ ] T003 [P] Create the image directories with READMEs: `infra/images/gw-guard/`,
+- [X] T003 [P] Create the image directories with READMEs: `infra/images/gw-guard/`,
   `infra/images/isolation-probe/` (the backup image is deferred).
-- [ ] T004 [P] Add `.dockerignore` at `backend/.dockerignore` (`*.test`, `*.out`, `.git`,
+- [X] T004 [P] Add `.dockerignore` at `backend/.dockerignore` (`*.test`, `*.out`, `.git`,
   `.env*`, `tests/`).
 
 ---
@@ -59,20 +59,21 @@ first. Everything else is code in this repository.
 
 **Purpose**: migration, the interim gate package and API, which US1–US3 all depend on.
 
-- [ ] T005 Write migration `backend/internal/store/migrations/0005_interim.sql` per
+- [X] T005 Write migration `backend/internal/store/migrations/0005_interim.sql` per
   [data-model.md](data-model.md): `isolation_test_result` (id uuid, tenant_id fk tenant,
   stack_hash text not null, ran_at timestamptz, passed bool not null, egress_ip inet null,
   results jsonb not null, ran_by text not null) and `backup_restore_test` (id, backup_key,
   backup_taken_at, tested_at, passed, details jsonb). Both **append-only**: revoke UPDATE and
   DELETE from `malgary_app`, as for `audit_record`. Index `(tenant_id, stack_hash, ran_at desc)`.
-- [ ] T006 Add queries to `backend/queries/interim.sql` (insert/list isolation results, latest
+- [X] T006 Add queries to `backend/queries/interim.sql` (insert/list isolation results, latest
   result for tenant + hash, insert restore test, any passed restore test, count active users
   across all tenants) and regenerate with sqlc into `backend/internal/store/db/`.
-- [ ] T007 Allow a single-host gateway "pair" for the interim cell: the standby may be absent
+- [X] T007 Allow a single-host gateway "pair" for the interim cell (done: `cell.interim` column,
+  cell code `iNN`, nullable standby, no PTA requirement on interim cells): the standby may be absent
   (or equal the primary) in `backend/internal/tenancy/inventory.go`, `placement.go`, and a
   `0005` constraint change if `gateway_pair` requires two distinct hosts. Placement must still
   require two hosts when the cell is not marked `interim: true`.
-- [ ] T008 Create package `backend/internal/interim/` (`interim.go`): `Limits` built from config
+- [X] T008 Create package `backend/internal/interim/` (`interim.go`): `Limits` built from config
   with `CheckImport(ctx, q, tenantSlug, emails []string) error` returning fixed errors
   `interim_user_limit` (would exceed `MaxUsers` across all tenants, FR-010),
   `interim_expired` (after `Until`, FR-011), `interim_tenant_not_allowed` (tenant not in the
@@ -80,25 +81,25 @@ first. Everything else is code in this repository.
   non-test tenant, while no passed `backup_restore_test` exists, FR-015); `DaysLeft(now)`;
   `CheckPlanPrice(tenantSlug, price)` (non-zero price only for `onedge`, FR-010). All are
   no-ops when interim is off.
-- [ ] T009 [P] Unit tests in `backend/internal/interim/interim_test.go` for each error, the
+- [X] T009 [P] Unit tests in `backend/internal/interim/interim_test.go` for each error, the
   domain rule (case-insensitive), and the disabled path.
-- [ ] T010 Call `CheckImport` inside the user import transaction in
+- [X] T010 Call `CheckImport` inside the user import transaction in
   `backend/internal/users/service.go` (before seats are counted), and `CheckPlanPrice` where
   subscriptions are created in `backend/internal/billing/`.
-- [ ] T011 Add the interim endpoints and error codes from
+- [X] T011 Add the interim endpoints and error codes from
   [contracts/interim-api.md](contracts/interim-api.md) to `backend/api/openapi.yaml`
   (`POST/GET /v1/tenants/{tenantId}/isolation-tests`, `POST /v1/backups/restore-tests`,
   `GET /v1/interim`; `inviteLink` on the import result); regenerate server and client.
-- [ ] T012 Implement handlers in `backend/internal/httpapi/interim.go`: operator-only writes,
+- [X] T012 Implement handlers in `backend/internal/httpapi/interim.go`: operator-only writes,
   tenant admins see only their own tenant (404 otherwise), all routes 404 when interim is off,
   every write audited with `audit.Record`.
-- [ ] T013 Add a `malgary_interim_days_left` gauge and `malgary_interim_users_used` gauge in
+- [X] T013 Add a `malgary_interim_days_left` gauge and `malgary_interim_users_used` gauge in
   `backend/cmd/malgaryd/main.go` metrics, and a 30-day warning rule in
   `infra/observability/alerts/platform.yaml` (FR-011).
-- [ ] T014 Integration test `backend/tests/integration/interim_test.go`: 11th user refused,
+- [X] T014 Integration test `backend/tests/integration/interim_test.go`: 11th user refused,
   expired date refused, non-test domain refused with no restore test and allowed after one is
   recorded, append-only tables reject UPDATE as `malgary_app`.
-- [ ] T015 Extend `backend/tests/contract/tenant_isolation_test.go` coverage so the new
+- [X] T015 Extend `backend/tests/contract/tenant_isolation_test.go` coverage so the new
   operations are walked (it reads the OpenAPI file; confirm the new paths pass).
 
 **Checkpoint**: interim limits work in tests with no server involved.

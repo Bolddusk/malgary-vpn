@@ -111,7 +111,8 @@ func Idempotency(s *store.Store) func(http.Handler) http.Handler {
 
 			rec := &statusRecorder{ResponseWriter: w, buf: &bytes.Buffer{}}
 			next.ServeHTTP(rec, r)
-			if rec.status > 0 && rec.status < 500 {
+			// no-store responses carry one-time secrets (invitation links), so they aren't kept.
+			if rec.status > 0 && rec.status < 500 && !strings.Contains(rec.Header().Get("Cache-Control"), "no-store") {
 				if err := s.PutIdempotency(r.Context(), db.PutIdempotencyParams{
 					Key: key, ActorID: actor, Method: r.Method, Path: r.URL.Path,
 					RequestHash: hash, StatusCode: int32(rec.status), ResponseBody: rec.buf.Bytes(),

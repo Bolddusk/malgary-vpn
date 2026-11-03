@@ -19,6 +19,8 @@ type CellInventory struct {
 	Code     string `json:"code"`
 	Region   string `json:"region"`
 	MaxUsers int32  `json:"maxUsers"`
+	// Interim marks a single shared host (feature 002): gateway pairs have no standby.
+	Interim bool `json:"interim,omitempty"`
 	Hosts    []struct {
 		Name     string `json:"name"`
 		Role     string `json:"role"`
@@ -44,7 +46,7 @@ func SyncInventory(ctx context.Context, s *store.Store, path string) error {
 		return fmt.Errorf("%s: %w", path, err)
 	}
 	return s.WithTx(ctx, func(q *db.Queries, _ pgxTx) error {
-		cell, err := q.UpsertCell(ctx, db.UpsertCellParams{ID: uuid.Must(uuid.NewV7()), Code: inv.Code, Region: inv.Region, MaxUsers: inv.MaxUsers})
+		cell, err := q.UpsertCell(ctx, db.UpsertCellParams{ID: uuid.Must(uuid.NewV7()), Code: inv.Code, Region: inv.Region, MaxUsers: inv.MaxUsers, Interim: inv.Interim})
 		if err != nil {
 			return err
 		}
@@ -67,10 +69,21 @@ func SyncInventory(ctx context.Context, s *store.Store, path string) error {
 			if err != nil {
 				return fmt.Errorf("pair %s egress IP: %w", p.Name, err)
 			}
-			pri, ok1 := ids[p.Primary]
-			sb, ok2 := ids[p.Standby]
-			if !ok1 || !ok2 {
-				return fmt.Errorf("pair %s: unknown member host", p.Name)
+			pri, ok := ids[p.Primary]
+			if !ok {
+				return fmt.Errorf("pair %s: unknown primary host %q", p.Name, p.Primary)
+			}
+			var sb *uuid.UUID
+			switch {
+			case p.Standby != "":
+				id, ok := ids[p.Standby]
+				if !ok {
+					return fmt.Errorf("pair %s: unknown standby host %q", p.Name, p.Standby)
+				}
+				sb = &id
+			case !inv.Interim:
+				// Principle IV: only the interim host may run without a standby gateway.
+				return fmt.Errorf("pair %s: a standby host is required outside an interim cell", p.Name)
 			}
 			if _, err := q.UpsertGatewayPair(ctx, db.UpsertGatewayPairParams{
 				ID: uuid.Must(uuid.NewV7()), CellID: cell.ID, Name: p.Name, EgressIp: ip, PrimaryHostID: pri, StandbyHostID: sb,

@@ -158,7 +158,7 @@ INSERT INTO idempotency_key (key, actor_id, method, path, request_hash, status_c
 VALUES ($1, $2, $3, $4, $5, $6, $7) ON CONFLICT DO NOTHING;
 
 -- name: UpsertCell :one
-INSERT INTO cell (id, code, region, max_users) VALUES ($1, $2, $3, $4)
+INSERT INTO cell (id, code, region, max_users, interim) VALUES ($1, $2, $3, $4, $5)
 ON CONFLICT (code) DO UPDATE SET region = EXCLUDED.region, max_users = EXCLUDED.max_users
 RETURNING *;
 

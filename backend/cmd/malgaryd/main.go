@@ -24,6 +24,7 @@ import (
 	"malgary/backend/internal/httpapi"
 	"malgary/backend/internal/httpapi/gen"
 	"malgary/backend/internal/identity"
+	"malgary/backend/internal/interim"
 	"malgary/backend/internal/netbird"
 	"malgary/backend/internal/reconcile"
 	"malgary/backend/internal/secrets"
@@ -94,7 +95,11 @@ func run() error {
 	if err != nil {
 		slog.Warn("groups claim hook disabled: no signing key", "err", err)
 	}
-	bill := &billing.Service{Store: st, Providers: map[string]providers.Provider{"manual": manual.Provider{}}}
+	limits := &interim.Limits{Config: cfg.Interim}
+	if limits.Active() {
+		slog.Info("interim hosting limits on", "maxUsers", cfg.Interim.MaxUsers, "until", cfg.Interim.Until.Format(time.DateOnly))
+	}
+	bill := &billing.Service{Store: st, Providers: map[string]providers.Provider{"manual": manual.Provider{}}, Interim: limits}
 	if ep := os.Getenv("MALGARY_SPACES_ENDPOINT"); ep != "" {
 		ak, _ := res.Resolve(secrets.Ref("spaces-access-key"))
 		sk, _ := res.Resolve(secrets.Ref("spaces-secret-key"))
@@ -105,15 +110,31 @@ func run() error {
 		bill.Proofs = sp
 	}
 	ten.Billing = bill
-	us := &users.Service{Store: st, Identity: idp, Seats: bill}
+	us := &users.Service{Store: st, Identity: idp, Seats: bill, Interim: limits, InviteAsLink: cfg.InviteDelivery == "link"}
 	loop := &reconcile.Loop{Store: st, Repair: ten}
+	interimSvc := &interim.Service{Limits: limits, Store: st, OnIsolationPassed: func(ctx context.Context, id uuid.UUID) {
+		if _, err := loop.One(ctx, id); err != nil {
+			slog.WarnContext(ctx, "re-apply after isolation pass", "tenant", id, "err", err)
+		}
+	}}
+	go func() {
+		for t := time.NewTicker(time.Minute); ; {
+			limits.UpdateMetrics(ctx, st.Queries)
+			select {
+			case <-ctx.Done():
+				t.Stop()
+				return
+			case <-t.C:
+			}
+		}
+	}()
 	sampler := &usage.Sampler{Store: st, Secrets: res, NetBird: ten.NetBird, BaseDomain: cfg.BaseDomain}
 	go loop.Run(ctx)
 	go sampler.Run(ctx)
-	go serveMetrics(ctx, cfg.MetricsListen)
+	go serveMetrics(ctx, cfg.MetricsListen, limits.Active())
 
 	h := &httpapi.Handlers{Deps: httpapi.Deps{Store: st, Tenancy: ten, Users: us, Billing: bill,
-		Ops: ops{st: st, loop: loop}, ClaimsSigningKey: claimsKey}}
+		Ops: ops{st: st, loop: loop}, Interim: interimSvc, ClaimsSigningKey: claimsKey}}
 
 	srv := &http.Server{
 		Addr:              cfg.Listen,
@@ -152,12 +173,16 @@ func (o ops) Reconcile(ctx context.Context, tenantID uuid.UUID) (string, error) 
 }
 
 // serveMetrics exposes malgaryd's own metrics for Alloy (alerts in infra/observability).
-func serveMetrics(ctx context.Context, addr string) {
+func serveMetrics(ctx context.Context, addr string, interimOn bool) {
 	mux := http.NewServeMux()
 	mux.HandleFunc("/metrics", func(w http.ResponseWriter, _ *http.Request) {
 		_, _ = fmt.Fprintf(w, "malgary_up 1\n")
 		_, _ = fmt.Fprintf(w, "malgary_tenant_seat_limit_hit_total %d\n", users.SeatLimitHitTotal())
 		_, _ = fmt.Fprintf(w, "malgary_reconcile_drift_tenants %d\n", reconcile.DriftOpen.Load())
+		if interimOn {
+			_, _ = fmt.Fprintf(w, "malgary_interim_days_left %d\n", interim.DaysLeft.Load())
+			_, _ = fmt.Fprintf(w, "malgary_interim_users_used %d\n", interim.UsersUsed.Load())
+		}
 	})
 	srv := &http.Server{Addr: addr, Handler: mux, ReadHeaderTimeout: 5 * time.Second}
 	go func() { <-ctx.Done(); _ = srv.Close() }()

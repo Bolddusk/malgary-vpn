@@ -27,7 +27,7 @@ type Provider interface {
 	EnsureTenantOrg(ctx context.Context, slug, legalName, managementURL string) (TenantApp, error)
 	ConfigureSignIn(ctx context.Context, orgID string, cfg SignInConfig) error
 	ApplyBranding(ctx context.Context, orgID string) error
-	CreateUser(ctx context.Context, orgID string, u NewUser) (string, error)
+	CreateUser(ctx context.Context, orgID string, u NewUser) (CreatedUser, error)
 	Issuer() string
 }
 

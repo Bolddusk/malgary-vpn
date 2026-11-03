@@ -649,6 +649,64 @@ paths:
         '204': {description: Recorded}
         default: {$ref: '#/components/responses/Problem'}
 
+  /tenants/{tenantId}/isolation-tests:
+    parameters: [{$ref: '#/components/parameters/TenantId'}]
+    post:
+      operationId: recordIsolationTest
+      summary: Record an isolation test result (operator, interim only, FR-009)
+      description: A pass for the stack's current hash enables the tenant's access policy.
+      parameters: [{$ref: '#/components/parameters/IdempotencyKey'}]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/IsolationTestInput'}
+      responses:
+        '201':
+          description: Recorded
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/IsolationTest'}
+        default: {$ref: '#/components/responses/Problem'}
+    get:
+      operationId: listIsolationTests
+      summary: Isolation test history, newest first (interim only)
+      responses:
+        '200':
+          description: Results
+          content:
+            application/json:
+              schema:
+                type: array
+                items: {$ref: '#/components/schemas/IsolationTest'}
+        default: {$ref: '#/components/responses/Problem'}
+
+  /backups/restore-tests:
+    post:
+      operationId: recordRestoreTest
+      summary: Record a backup restore test (operator, interim only, FR-015)
+      parameters: [{$ref: '#/components/parameters/IdempotencyKey'}]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/RestoreTestInput'}
+      responses:
+        '201': {description: Recorded}
+        default: {$ref: '#/components/responses/Problem'}
+
+  /interim:
+    get:
+      operationId: getInterim
+      summary: Interim hosting limits and usage (FR-010 to FR-012)
+      responses:
+        '200':
+          description: Interim status
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/InterimStatus'}
+        default: {$ref: '#/components/responses/Problem'}
+
 components:
   securitySchemes:
     bearer:
@@ -687,7 +745,9 @@ components:
           enum: [seat_limit_reached, plan_version_immutable, entitlement_missing,
                  routing_rule_empty_destinations, tenant_suspended, idempotency_conflict,
                  stack_not_ready, not_found, invalid_request, unauthorized, precondition_failed,
-                 gateway_not_pta_registered, internal]
+                 gateway_not_pta_registered, interim_user_limit, interim_expired,
+                 interim_tenant_not_allowed, isolation_test_required, restore_test_required,
+                 internal]
 
     Reason:
       type: object
@@ -829,6 +889,69 @@ components:
         existing: {type: integer}
         seatsUsed: {type: integer}
         seatsPaid: {type: integer}
+        invites:
+          description: |
+            One-time invitation links for managed-account users, only when invitations are
+            delivered as links (FR-012a). Shown once; never stored by Malgary.
+          type: array
+          items: {$ref: '#/components/schemas/InviteLink'}
+
+    InviteLink:
+      type: object
+      required: [email, url]
+      properties:
+        email: {type: string}
+        url: {type: string}
+
+    IsolationProbe:
+      type: object
+      required: [target, expected, got]
+      properties:
+        target: {type: string, description: 'host:port or URL'}
+        expected: {type: string, enum: [blocked, reachable]}
+        got: {type: string, enum: [blocked, reachable]}
+
+    IsolationTestInput:
+      type: object
+      required: [stackHash, passed, results]
+      properties:
+        stackHash: {type: string, minLength: 8}
+        passed: {type: boolean}
+        egressIp: {type: string}
+        results:
+          type: array
+          items: {$ref: '#/components/schemas/IsolationProbe'}
+
+    IsolationTest:
+      allOf:
+        - $ref: '#/components/schemas/IsolationTestInput'
+        - type: object
+          required: [id, ranAt, ranBy]
+          properties:
+            id: {type: string, format: uuid}
+            ranAt: {type: string, format: date-time}
+            ranBy: {type: string}
+
+    RestoreTestInput:
+      type: object
+      required: [backupKey, backupTakenAt, passed, details]
+      properties:
+        backupKey: {type: string, minLength: 1}
+        backupTakenAt: {type: string, format: date-time}
+        passed: {type: boolean}
+        details: {type: object, additionalProperties: true}
+
+    InterimStatus:
+      type: object
+      required: [active]
+      properties:
+        active: {type: boolean}
+        maxUsers: {type: integer}
+        usersUsed: {type: integer}
+        until: {type: string, format: date}
+        daysLeft: {type: integer}
+        egressNote: {type: string}
+        restoreTestPassed: {type: boolean}
 
     User:
       type: object

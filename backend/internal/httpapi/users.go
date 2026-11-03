@@ -22,6 +22,10 @@ func (h *Handlers) ImportUsers(w http.ResponseWriter, r *http.Request, tenantID 
 		WriteError(w, r, err)
 		return
 	}
+	if res.Invites != nil {
+		// Invitation links are credentials: keep them out of caches and the idempotency store.
+		w.Header().Set("Cache-Control", "no-store")
+	}
 	WriteJSON(w, http.StatusOK, res)
 }
 

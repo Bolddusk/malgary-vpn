@@ -78,6 +78,42 @@ func (e InvoiceStatus) Valid() bool {
 	}
 }
 
+// Defines values for IsolationProbeExpected.
+const (
+	IsolationProbeExpectedBlocked   IsolationProbeExpected = "blocked"
+	IsolationProbeExpectedReachable IsolationProbeExpected = "reachable"
+)
+
+// Valid indicates whether the value is a known member of the IsolationProbeExpected enum.
+func (e IsolationProbeExpected) Valid() bool {
+	switch e {
+	case IsolationProbeExpectedBlocked:
+		return true
+	case IsolationProbeExpectedReachable:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for IsolationProbeGot.
+const (
+	IsolationProbeGotBlocked   IsolationProbeGot = "blocked"
+	IsolationProbeGotReachable IsolationProbeGot = "reachable"
+)
+
+// Valid indicates whether the value is a known member of the IsolationProbeGot enum.
+func (e IsolationProbeGot) Valid() bool {
+	switch e {
+	case IsolationProbeGotBlocked:
+		return true
+	case IsolationProbeGotReachable:
+		return true
+	default:
+		return false
+	}
+}
+
 // Defines values for PlanStatus.
 const (
 	PlanStatusActive  PlanStatus = "active"
@@ -194,11 +230,16 @@ const (
 	EntitlementMissing           ProblemCode = "entitlement_missing"
 	GatewayNotPtaRegistered      ProblemCode = "gateway_not_pta_registered"
 	IdempotencyConflict          ProblemCode = "idempotency_conflict"
+	InterimExpired               ProblemCode = "interim_expired"
+	InterimTenantNotAllowed      ProblemCode = "interim_tenant_not_allowed"
+	InterimUserLimit             ProblemCode = "interim_user_limit"
 	Internal                     ProblemCode = "internal"
 	InvalidRequest               ProblemCode = "invalid_request"
+	IsolationTestRequired        ProblemCode = "isolation_test_required"
 	NotFound                     ProblemCode = "not_found"
 	PlanVersionImmutable         ProblemCode = "plan_version_immutable"
 	PreconditionFailed           ProblemCode = "precondition_failed"
+	RestoreTestRequired          ProblemCode = "restore_test_required"
 	RoutingRuleEmptyDestinations ProblemCode = "routing_rule_empty_destinations"
 	SeatLimitReached             ProblemCode = "seat_limit_reached"
 	StackNotReady                ProblemCode = "stack_not_ready"
@@ -215,15 +256,25 @@ func (e ProblemCode) Valid() bool {
 		return true
 	case IdempotencyConflict:
 		return true
+	case InterimExpired:
+		return true
+	case InterimTenantNotAllowed:
+		return true
+	case InterimUserLimit:
+		return true
 	case Internal:
 		return true
 	case InvalidRequest:
+		return true
+	case IsolationTestRequired:
 		return true
 	case NotFound:
 		return true
 	case PlanVersionImmutable:
 		return true
 	case PreconditionFailed:
+		return true
+	case RestoreTestRequired:
 		return true
 	case RoutingRuleEmptyDestinations:
 		return true
@@ -648,10 +699,31 @@ type IdentitySignInMethods string
 
 // ImportResult defines model for ImportResult.
 type ImportResult struct {
-	Created   int `json:"created"`
-	Existing  int `json:"existing"`
-	SeatsPaid int `json:"seatsPaid"`
-	SeatsUsed int `json:"seatsUsed"`
+	Created  int `json:"created"`
+	Existing int `json:"existing"`
+
+	// Invites One-time invitation links for managed-account users, only when invitations are
+	// delivered as links (FR-012a). Shown once; never stored by Malgary.
+	Invites   *[]InviteLink `json:"invites,omitempty"`
+	SeatsPaid int           `json:"seatsPaid"`
+	SeatsUsed int           `json:"seatsUsed"`
+}
+
+// InterimStatus defines model for InterimStatus.
+type InterimStatus struct {
+	Active            bool                `json:"active"`
+	DaysLeft          *int                `json:"daysLeft,omitempty"`
+	EgressNote        *string             `json:"egressNote,omitempty"`
+	MaxUsers          *int                `json:"maxUsers,omitempty"`
+	RestoreTestPassed *bool               `json:"restoreTestPassed,omitempty"`
+	Until             *openapi_types.Date `json:"until,omitempty"`
+	UsersUsed         *int                `json:"usersUsed,omitempty"`
+}
+
+// InviteLink defines model for InviteLink.
+type InviteLink struct {
+	Email string `json:"email"`
+	Url   string `json:"url"`
 }
 
 // Invoice defines model for Invoice.
@@ -678,6 +750,40 @@ type Invoice struct {
 
 // InvoiceStatus defines model for Invoice.Status.
 type InvoiceStatus string
+
+// IsolationProbe defines model for IsolationProbe.
+type IsolationProbe struct {
+	Expected IsolationProbeExpected `json:"expected"`
+	Got      IsolationProbeGot      `json:"got"`
+
+	// Target host:port or URL
+	Target string `json:"target"`
+}
+
+// IsolationProbeExpected defines model for IsolationProbe.Expected.
+type IsolationProbeExpected string
+
+// IsolationProbeGot defines model for IsolationProbe.Got.
+type IsolationProbeGot string
+
+// IsolationTest defines model for IsolationTest.
+type IsolationTest struct {
+	EgressIp  *string            `json:"egressIp,omitempty"`
+	Id        openapi_types.UUID `json:"id"`
+	Passed    bool               `json:"passed"`
+	RanAt     time.Time          `json:"ranAt"`
+	RanBy     string             `json:"ranBy"`
+	Results   []IsolationProbe   `json:"results"`
+	StackHash string             `json:"stackHash"`
+}
+
+// IsolationTestInput defines model for IsolationTestInput.
+type IsolationTestInput struct {
+	EgressIp  *string          `json:"egressIp,omitempty"`
+	Passed    bool             `json:"passed"`
+	Results   []IsolationProbe `json:"results"`
+	StackHash string           `json:"stackHash"`
+}
 
 // Money defines model for Money.
 type Money struct {
@@ -802,6 +908,14 @@ type ProblemCode string
 // Reason defines model for Reason.
 type Reason struct {
 	Reason string `json:"reason"`
+}
+
+// RestoreTestInput defines model for RestoreTestInput.
+type RestoreTestInput struct {
+	BackupKey     string                 `json:"backupKey"`
+	BackupTakenAt time.Time              `json:"backupTakenAt"`
+	Details       map[string]interface{} `json:"details"`
+	Passed        bool                   `json:"passed"`
 }
 
 // RoutingRule defines model for RoutingRule.
@@ -1068,6 +1182,11 @@ type TenantId = openapi_types.UUID
 // UserId defines model for UserId.
 type UserId = openapi_types.UUID
 
+// RecordRestoreTestParams defines parameters for RecordRestoreTest.
+type RecordRestoreTestParams struct {
+	IdempotencyKey *IdempotencyKey `json:"Idempotency-Key,omitempty"`
+}
+
 // MarkGatewayPairPTAJSONBody defines parameters for MarkGatewayPairPTA.
 type MarkGatewayPairPTAJSONBody struct {
 	Reference    string    `json:"reference"`
@@ -1144,6 +1263,11 @@ type DraftInvoiceParams struct {
 	IdempotencyKey *IdempotencyKey `json:"Idempotency-Key,omitempty"`
 }
 
+// RecordIsolationTestParams defines parameters for RecordIsolationTest.
+type RecordIsolationTestParams struct {
+	IdempotencyKey *IdempotencyKey `json:"Idempotency-Key,omitempty"`
+}
+
 // PutPostureRulesJSONBody defines parameters for PutPostureRules.
 type PutPostureRulesJSONBody = []PostureRule
 
@@ -1211,6 +1335,9 @@ type SuspendTenantParams struct {
 	IdempotencyKey *IdempotencyKey `json:"Idempotency-Key,omitempty"`
 }
 
+// RecordRestoreTestJSONRequestBody defines body for RecordRestoreTest for application/json ContentType.
+type RecordRestoreTestJSONRequestBody = RestoreTestInput
+
 // MarkGatewayPairPTAJSONRequestBody defines body for MarkGatewayPairPTA for application/json ContentType.
 type MarkGatewayPairPTAJSONRequestBody MarkGatewayPairPTAJSONBody
 
@@ -1240,6 +1367,9 @@ type PutIdentityJSONRequestBody = Identity
 
 // DraftInvoiceJSONRequestBody defines body for DraftInvoice for application/json ContentType.
 type DraftInvoiceJSONRequestBody DraftInvoiceJSONBody
+
+// RecordIsolationTestJSONRequestBody defines body for RecordIsolationTest for application/json ContentType.
+type RecordIsolationTestJSONRequestBody = IsolationTestInput
 
 // PutPostureRulesJSONRequestBody defines body for PutPostureRules for application/json ContentType.
 type PutPostureRulesJSONRequestBody = PutPostureRulesJSONBody
@@ -1339,6 +1469,20 @@ func WithRequestEditorFn(fn RequestEditorFn) ClientOption {
 // The interface specification for the client above.
 type ClientInterface interface {
 
+	// RecordRestoreTestWithBody Record a backup restore test (operator, interim only, FR-015)
+	//
+	// Takes any type of body and a specified content type.
+	//
+	// Corresponds with POST /backups/restore-tests (the `RecordRestoreTest` operationId).
+	RecordRestoreTestWithBody(ctx context.Context, params *RecordRestoreTestParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// RecordRestoreTest Record a backup restore test (operator, interim only, FR-015)
+	//
+	// Takes a body of the `application/json` content type.
+	//
+	// Corresponds with POST /backups/restore-tests (the `RecordRestoreTest` operationId).
+	RecordRestoreTest(ctx context.Context, params *RecordRestoreTestParams, body RecordRestoreTestJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
+
 	// ListCells Cells (owner, operator)
 	//
 	// Corresponds with GET /cells (the `ListCells` operationId).
@@ -1362,6 +1506,11 @@ type ClientInterface interface {
 	//
 	// Corresponds with POST /gateway-pairs/{name}:pta (the `MarkGatewayPairPTA` operationId).
 	MarkGatewayPairPTA(ctx context.Context, name string, body MarkGatewayPairPTAJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// GetInterim Interim hosting limits and usage (FR-010 to FR-012)
+	//
+	// Corresponds with GET /interim (the `GetInterim` operationId).
+	GetInterim(ctx context.Context, reqEditors ...RequestEditorFn) (*http.Response, error)
 
 	// RecordPaymentWithBody Record a manual payment with reference and optional proof (owner, FR-016c)
 	//
@@ -1539,6 +1688,29 @@ type ClientInterface interface {
 	// Corresponds with POST /tenants/{tenantId}/invoices (the `DraftInvoice` operationId).
 	DraftInvoice(ctx context.Context, tenantId TenantId, params *DraftInvoiceParams, body DraftInvoiceJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
 
+	// ListIsolationTests Isolation test history, newest first (interim only)
+	//
+	// Corresponds with GET /tenants/{tenantId}/isolation-tests (the `ListIsolationTests` operationId).
+	ListIsolationTests(ctx context.Context, tenantId TenantId, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// RecordIsolationTestWithBody Record an isolation test result (operator, interim only, FR-009)
+	//
+	// A pass for the stack's current hash enables the tenant's access policy.
+	//
+	// Takes any type of body and a specified content type.
+	//
+	// Corresponds with POST /tenants/{tenantId}/isolation-tests (the `RecordIsolationTest` operationId).
+	RecordIsolationTestWithBody(ctx context.Context, tenantId TenantId, params *RecordIsolationTestParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// RecordIsolationTest Record an isolation test result (operator, interim only, FR-009)
+	//
+	// A pass for the stack's current hash enables the tenant's access policy.
+	//
+	// Takes a body of the `application/json` content type.
+	//
+	// Corresponds with POST /tenants/{tenantId}/isolation-tests (the `RecordIsolationTest` operationId).
+	RecordIsolationTest(ctx context.Context, tenantId TenantId, params *RecordIsolationTestParams, body RecordIsolationTestJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
+
 	// GetPostureRules Posture rules (FR-018)
 	//
 	// Corresponds with GET /tenants/{tenantId}/posture-rules (the `GetPostureRules` operationId).
@@ -1697,6 +1869,40 @@ type ClientInterface interface {
 	SuspendTenant(ctx context.Context, tenantId TenantId, params *SuspendTenantParams, body SuspendTenantJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
 }
 
+// RecordRestoreTestWithBody Record a backup restore test (operator, interim only, FR-015)
+//
+// Takes any type of body and a specified content type.
+//
+// Corresponds with POST /backups/restore-tests (the `RecordRestoreTest` operationId).
+func (c *Client) RecordRestoreTestWithBody(ctx context.Context, params *RecordRestoreTestParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewRecordRestoreTestRequestWithBody(c.Server, params, contentType, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// RecordRestoreTest Record a backup restore test (operator, interim only, FR-015)
+//
+// Takes a body of the `application/json` content type.
+//
+// Corresponds with POST /backups/restore-tests (the `RecordRestoreTest` operationId).
+func (c *Client) RecordRestoreTest(ctx context.Context, params *RecordRestoreTestParams, body RecordRestoreTestJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewRecordRestoreTestRequest(c.Server, params, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
 // ListCells Cells (owner, operator)
 //
 // Corresponds with GET /cells (the `ListCells` operationId).
@@ -1751,6 +1957,21 @@ func (c *Client) MarkGatewayPairPTAWithBody(ctx context.Context, name string, co
 // Corresponds with POST /gateway-pairs/{name}:pta (the `MarkGatewayPairPTA` operationId).
 func (c *Client) MarkGatewayPairPTA(ctx context.Context, name string, body MarkGatewayPairPTAJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
 	req, err := NewMarkGatewayPairPTARequest(c.Server, name, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// GetInterim Interim hosting limits and usage (FR-010 to FR-012)
+//
+// Corresponds with GET /interim (the `GetInterim` operationId).
+func (c *Client) GetInterim(ctx context.Context, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewGetInterimRequest(c.Server)
 	if err != nil {
 		return nil, err
 	}
@@ -2217,6 +2438,59 @@ func (c *Client) DraftInvoice(ctx context.Context, tenantId TenantId, params *Dr
 	return c.Client.Do(req)
 }
 
+// ListIsolationTests Isolation test history, newest first (interim only)
+//
+// Corresponds with GET /tenants/{tenantId}/isolation-tests (the `ListIsolationTests` operationId).
+func (c *Client) ListIsolationTests(ctx context.Context, tenantId TenantId, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewListIsolationTestsRequest(c.Server, tenantId)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// RecordIsolationTestWithBody Record an isolation test result (operator, interim only, FR-009)
+//
+// A pass for the stack's current hash enables the tenant's access policy.
+//
+// Takes any type of body and a specified content type.
+//
+// Corresponds with POST /tenants/{tenantId}/isolation-tests (the `RecordIsolationTest` operationId).
+func (c *Client) RecordIsolationTestWithBody(ctx context.Context, tenantId TenantId, params *RecordIsolationTestParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewRecordIsolationTestRequestWithBody(c.Server, tenantId, params, contentType, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// RecordIsolationTest Record an isolation test result (operator, interim only, FR-009)
+//
+// A pass for the stack's current hash enables the tenant's access policy.
+//
+// Takes a body of the `application/json` content type.
+//
+// Corresponds with POST /tenants/{tenantId}/isolation-tests (the `RecordIsolationTest` operationId).
+func (c *Client) RecordIsolationTest(ctx context.Context, tenantId TenantId, params *RecordIsolationTestParams, body RecordIsolationTestJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewRecordIsolationTestRequest(c.Server, tenantId, params, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
 // GetPostureRules Posture rules (FR-018)
 //
 // Corresponds with GET /tenants/{tenantId}/posture-rules (the `GetPostureRules` operationId).
@@ -2624,6 +2898,61 @@ func (c *Client) SuspendTenant(ctx context.Context, tenantId TenantId, params *S
 	return c.Client.Do(req)
 }
 
+// NewRecordRestoreTestRequest calls the generic RecordRestoreTest builder with application/json body
+func NewRecordRestoreTestRequest(server string, params *RecordRestoreTestParams, body RecordRestoreTestJSONRequestBody) (*http.Request, error) {
+	var bodyReader io.Reader
+	buf, err := json.Marshal(body)
+	if err != nil {
+		return nil, err
+	}
+	bodyReader = bytes.NewReader(buf)
+	return NewRecordRestoreTestRequestWithBody(server, params, "application/json", bodyReader)
+}
+
+// NewRecordRestoreTestRequestWithBody constructs an http.Request for the RecordRestoreTest method, with any body, and a specified content type
+func NewRecordRestoreTestRequestWithBody(server string, params *RecordRestoreTestParams, contentType string, body io.Reader) (*http.Request, error) {
+	var err error
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/backups/restore-tests")
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest(http.MethodPost, queryURL.String(), body)
+	if err != nil {
+		return nil, err
+	}
+
+	req.Header.Add("Content-Type", contentType)
+
+	if params != nil {
+
+		if params.IdempotencyKey != nil {
+			var headerParam0 string
+
+			headerParam0, err = runtime.StyleParamWithOptions("simple", false, "Idempotency-Key", *params.IdempotencyKey, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationHeader, Type: "string", Format: ""})
+			if err != nil {
+				return nil, err
+			}
+
+			req.Header.Set("Idempotency-Key", headerParam0)
+		}
+
+	}
+
+	return req, nil
+}
+
 // NewListCellsRequest constructs an http.Request for the ListCells method
 func NewListCellsRequest(server string) (*http.Request, error) {
 	var err error
@@ -2728,6 +3057,33 @@ func NewMarkGatewayPairPTARequestWithBody(server string, name string, contentTyp
 	}
 
 	req.Header.Add("Content-Type", contentType)
+
+	return req, nil
+}
+
+// NewGetInterimRequest constructs an http.Request for the GetInterim method
+func NewGetInterimRequest(server string) (*http.Request, error) {
+	var err error
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/interim")
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest(http.MethodGet, queryURL.String(), nil)
+	if err != nil {
+		return nil, err
+	}
 
 	return req, nil
 }
@@ -3716,6 +4072,102 @@ func NewDraftInvoiceRequestWithBody(server string, tenantId TenantId, params *Dr
 	return req, nil
 }
 
+// NewListIsolationTestsRequest constructs an http.Request for the ListIsolationTests method
+func NewListIsolationTestsRequest(server string, tenantId TenantId) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithOptions("simple", false, "tenantId", tenantId, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: "uuid"})
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/tenants/%s/isolation-tests", pathParam0)
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest(http.MethodGet, queryURL.String(), nil)
+	if err != nil {
+		return nil, err
+	}
+
+	return req, nil
+}
+
+// NewRecordIsolationTestRequest calls the generic RecordIsolationTest builder with application/json body
+func NewRecordIsolationTestRequest(server string, tenantId TenantId, params *RecordIsolationTestParams, body RecordIsolationTestJSONRequestBody) (*http.Request, error) {
+	var bodyReader io.Reader
+	buf, err := json.Marshal(body)
+	if err != nil {
+		return nil, err
+	}
+	bodyReader = bytes.NewReader(buf)
+	return NewRecordIsolationTestRequestWithBody(server, tenantId, params, "application/json", bodyReader)
+}
+
+// NewRecordIsolationTestRequestWithBody constructs an http.Request for the RecordIsolationTest method, with any body, and a specified content type
+func NewRecordIsolationTestRequestWithBody(server string, tenantId TenantId, params *RecordIsolationTestParams, contentType string, body io.Reader) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithOptions("simple", false, "tenantId", tenantId, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: "uuid"})
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/tenants/%s/isolation-tests", pathParam0)
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest(http.MethodPost, queryURL.String(), body)
+	if err != nil {
+		return nil, err
+	}
+
+	req.Header.Add("Content-Type", contentType)
+
+	if params != nil {
+
+		if params.IdempotencyKey != nil {
+			var headerParam0 string
+
+			headerParam0, err = runtime.StyleParamWithOptions("simple", false, "Idempotency-Key", *params.IdempotencyKey, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationHeader, Type: "string", Format: ""})
+			if err != nil {
+				return nil, err
+			}
+
+			req.Header.Set("Idempotency-Key", headerParam0)
+		}
+
+	}
+
+	return req, nil
+}
+
 // NewGetPostureRulesRequest constructs an http.Request for the GetPostureRules method
 func NewGetPostureRulesRequest(server string, tenantId TenantId) (*http.Request, error) {
 	var err error
@@ -4666,6 +5118,20 @@ func WithBaseURL(baseURL string) ClientOption {
 // ClientWithResponsesInterface is the interface specification for the client with responses above.
 type ClientWithResponsesInterface interface {
 
+	// RecordRestoreTestWithBodyWithResponse Record a backup restore test (operator, interim only, FR-015)
+	//
+	// Takes any type of body and a specified content type, and returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with POST /backups/restore-tests (the `RecordRestoreTest` operationId).
+	RecordRestoreTestWithBodyWithResponse(ctx context.Context, params *RecordRestoreTestParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*RecordRestoreTestResponse, error)
+
+	// RecordRestoreTestWithResponse Record a backup restore test (operator, interim only, FR-015)
+	//
+	// Takes a body of the `application/json` content type, and returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with POST /backups/restore-tests (the `RecordRestoreTest` operationId).
+	RecordRestoreTestWithResponse(ctx context.Context, params *RecordRestoreTestParams, body RecordRestoreTestJSONRequestBody, reqEditors ...RequestEditorFn) (*RecordRestoreTestResponse, error)
+
 	// ListCellsWithResponse Cells (owner, operator)
 	//
 	// Returns a wrapper object for the known response body format(s).
@@ -4693,6 +5159,13 @@ type ClientWithResponsesInterface interface {
 	//
 	// Corresponds with POST /gateway-pairs/{name}:pta (the `MarkGatewayPairPTA` operationId).
 	MarkGatewayPairPTAWithResponse(ctx context.Context, name string, body MarkGatewayPairPTAJSONRequestBody, reqEditors ...RequestEditorFn) (*MarkGatewayPairPTAResponse, error)
+
+	// GetInterimWithResponse Interim hosting limits and usage (FR-010 to FR-012)
+	//
+	// Returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with GET /interim (the `GetInterim` operationId).
+	GetInterimWithResponse(ctx context.Context, reqEditors ...RequestEditorFn) (*GetInterimResponse, error)
 
 	// RecordPaymentWithBodyWithResponse Record a manual payment with reference and optional proof (owner, FR-016c)
 	//
@@ -4890,6 +5363,31 @@ type ClientWithResponsesInterface interface {
 	// Corresponds with POST /tenants/{tenantId}/invoices (the `DraftInvoice` operationId).
 	DraftInvoiceWithResponse(ctx context.Context, tenantId TenantId, params *DraftInvoiceParams, body DraftInvoiceJSONRequestBody, reqEditors ...RequestEditorFn) (*DraftInvoiceResponse, error)
 
+	// ListIsolationTestsWithResponse Isolation test history, newest first (interim only)
+	//
+	// Returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with GET /tenants/{tenantId}/isolation-tests (the `ListIsolationTests` operationId).
+	ListIsolationTestsWithResponse(ctx context.Context, tenantId TenantId, reqEditors ...RequestEditorFn) (*ListIsolationTestsResponse, error)
+
+	// RecordIsolationTestWithBodyWithResponse Record an isolation test result (operator, interim only, FR-009)
+	//
+	// A pass for the stack's current hash enables the tenant's access policy.
+	//
+	// Takes any type of body and a specified content type, and returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with POST /tenants/{tenantId}/isolation-tests (the `RecordIsolationTest` operationId).
+	RecordIsolationTestWithBodyWithResponse(ctx context.Context, tenantId TenantId, params *RecordIsolationTestParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*RecordIsolationTestResponse, error)
+
+	// RecordIsolationTestWithResponse Record an isolation test result (operator, interim only, FR-009)
+	//
+	// A pass for the stack's current hash enables the tenant's access policy.
+	//
+	// Takes a body of the `application/json` content type, and returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with POST /tenants/{tenantId}/isolation-tests (the `RecordIsolationTest` operationId).
+	RecordIsolationTestWithResponse(ctx context.Context, tenantId TenantId, params *RecordIsolationTestParams, body RecordIsolationTestJSONRequestBody, reqEditors ...RequestEditorFn) (*RecordIsolationTestResponse, error)
+
 	// GetPostureRulesWithResponse Posture rules (FR-018)
 	//
 	// Returns a wrapper object for the known response body format(s).
@@ -5066,6 +5564,47 @@ type ClientWithResponsesInterface interface {
 	SuspendTenantWithResponse(ctx context.Context, tenantId TenantId, params *SuspendTenantParams, body SuspendTenantJSONRequestBody, reqEditors ...RequestEditorFn) (*SuspendTenantResponse, error)
 }
 
+type RecordRestoreTestResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	// ApplicationproblemJSONDefault the response for an HTTP default `application/problem+json` response
+	ApplicationproblemJSONDefault *Problem
+}
+
+// GetApplicationproblemJSONDefault returns the response for an HTTP default `application/problem+json` response
+func (r RecordRestoreTestResponse) GetApplicationproblemJSONDefault() *Problem {
+	return r.ApplicationproblemJSONDefault
+}
+
+// GetBody returns the raw response body bytes
+func (r RecordRestoreTestResponse) GetBody() []byte {
+	return r.Body
+}
+
+// Status returns HTTPResponse.Status
+func (r RecordRestoreTestResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r RecordRestoreTestResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+// ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
+func (r RecordRestoreTestResponse) ContentType() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Header.Get("Content-Type")
+	}
+	return ""
+}
+
 type ListCellsResponse struct {
 	Body         []byte
 	HTTPResponse *http.Response
@@ -5197,6 +5736,54 @@ func (r MarkGatewayPairPTAResponse) StatusCode() int {
 
 // ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
 func (r MarkGatewayPairPTAResponse) ContentType() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Header.Get("Content-Type")
+	}
+	return ""
+}
+
+type GetInterimResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	// JSON200 the response for an HTTP 200 `application/json` response
+	JSON200 *InterimStatus
+	// ApplicationproblemJSONDefault the response for an HTTP default `application/problem+json` response
+	ApplicationproblemJSONDefault *Problem
+}
+
+// GetJSON200 returns the response for an HTTP 200 `application/json` response
+func (r GetInterimResponse) GetJSON200() *InterimStatus {
+	return r.JSON200
+}
+
+// GetApplicationproblemJSONDefault returns the response for an HTTP default `application/problem+json` response
+func (r GetInterimResponse) GetApplicationproblemJSONDefault() *Problem {
+	return r.ApplicationproblemJSONDefault
+}
+
+// GetBody returns the raw response body bytes
+func (r GetInterimResponse) GetBody() []byte {
+	return r.Body
+}
+
+// Status returns HTTPResponse.Status
+func (r GetInterimResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r GetInterimResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+// ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
+func (r GetInterimResponse) ContentType() string {
 	if r.HTTPResponse != nil {
 		return r.HTTPResponse.Header.Get("Content-Type")
 	}
@@ -6115,6 +6702,102 @@ func (r DraftInvoiceResponse) ContentType() string {
 	return ""
 }
 
+type ListIsolationTestsResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	// JSON200 the response for an HTTP 200 `application/json` response
+	JSON200 *[]IsolationTest
+	// ApplicationproblemJSONDefault the response for an HTTP default `application/problem+json` response
+	ApplicationproblemJSONDefault *Problem
+}
+
+// GetJSON200 returns the response for an HTTP 200 `application/json` response
+func (r ListIsolationTestsResponse) GetJSON200() *[]IsolationTest {
+	return r.JSON200
+}
+
+// GetApplicationproblemJSONDefault returns the response for an HTTP default `application/problem+json` response
+func (r ListIsolationTestsResponse) GetApplicationproblemJSONDefault() *Problem {
+	return r.ApplicationproblemJSONDefault
+}
+
+// GetBody returns the raw response body bytes
+func (r ListIsolationTestsResponse) GetBody() []byte {
+	return r.Body
+}
+
+// Status returns HTTPResponse.Status
+func (r ListIsolationTestsResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r ListIsolationTestsResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+// ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
+func (r ListIsolationTestsResponse) ContentType() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Header.Get("Content-Type")
+	}
+	return ""
+}
+
+type RecordIsolationTestResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	// JSON201 the response for an HTTP 201 `application/json` response
+	JSON201 *IsolationTest
+	// ApplicationproblemJSONDefault the response for an HTTP default `application/problem+json` response
+	ApplicationproblemJSONDefault *Problem
+}
+
+// GetJSON201 returns the response for an HTTP 201 `application/json` response
+func (r RecordIsolationTestResponse) GetJSON201() *IsolationTest {
+	return r.JSON201
+}
+
+// GetApplicationproblemJSONDefault returns the response for an HTTP default `application/problem+json` response
+func (r RecordIsolationTestResponse) GetApplicationproblemJSONDefault() *Problem {
+	return r.ApplicationproblemJSONDefault
+}
+
+// GetBody returns the raw response body bytes
+func (r RecordIsolationTestResponse) GetBody() []byte {
+	return r.Body
+}
+
+// Status returns HTTPResponse.Status
+func (r RecordIsolationTestResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r RecordIsolationTestResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+// ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
+func (r RecordIsolationTestResponse) ContentType() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Header.Get("Content-Type")
+	}
+	return ""
+}
+
 type GetPostureRulesResponse struct {
 	Body         []byte
 	HTTPResponse *http.Response
@@ -6910,6 +7593,32 @@ func (r SuspendTenantResponse) ContentType() string {
 	return ""
 }
 
+// RecordRestoreTestWithBodyWithResponse Record a backup restore test (operator, interim only, FR-015)
+//
+// Takes any type of body and a specified content type, and returns a wrapper object for the known response body format(s).
+//
+// Corresponds with POST /backups/restore-tests (the `RecordRestoreTest` operationId).
+func (c *ClientWithResponses) RecordRestoreTestWithBodyWithResponse(ctx context.Context, params *RecordRestoreTestParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*RecordRestoreTestResponse, error) {
+	rsp, err := c.RecordRestoreTestWithBody(ctx, params, contentType, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseRecordRestoreTestResponse(rsp)
+}
+
+// RecordRestoreTestWithResponse Record a backup restore test (operator, interim only, FR-015)
+//
+// Takes a body of the `application/json` content type, and returns a wrapper object for the known response body format(s).
+//
+// Corresponds with POST /backups/restore-tests (the `RecordRestoreTest` operationId).
+func (c *ClientWithResponses) RecordRestoreTestWithResponse(ctx context.Context, params *RecordRestoreTestParams, body RecordRestoreTestJSONRequestBody, reqEditors ...RequestEditorFn) (*RecordRestoreTestResponse, error) {
+	rsp, err := c.RecordRestoreTest(ctx, params, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseRecordRestoreTestResponse(rsp)
+}
+
 // ListCellsWithResponse Cells (owner, operator)
 //
 // Returns a wrapper object for the known response body format(s).
@@ -6960,6 +7669,19 @@ func (c *ClientWithResponses) MarkGatewayPairPTAWithResponse(ctx context.Context
 		return nil, err
 	}
 	return ParseMarkGatewayPairPTAResponse(rsp)
+}
+
+// GetInterimWithResponse Interim hosting limits and usage (FR-010 to FR-012)
+//
+// Returns a wrapper object for the known response body format(s).
+//
+// Corresponds with GET /interim (the `GetInterim` operationId).
+func (c *ClientWithResponses) GetInterimWithResponse(ctx context.Context, reqEditors ...RequestEditorFn) (*GetInterimResponse, error) {
+	rsp, err := c.GetInterim(ctx, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseGetInterimResponse(rsp)
 }
 
 // RecordPaymentWithBodyWithResponse Record a manual payment with reference and optional proof (owner, FR-016c)
@@ -7326,6 +8048,49 @@ func (c *ClientWithResponses) DraftInvoiceWithResponse(ctx context.Context, tena
 	return ParseDraftInvoiceResponse(rsp)
 }
 
+// ListIsolationTestsWithResponse Isolation test history, newest first (interim only)
+//
+// Returns a wrapper object for the known response body format(s).
+//
+// Corresponds with GET /tenants/{tenantId}/isolation-tests (the `ListIsolationTests` operationId).
+func (c *ClientWithResponses) ListIsolationTestsWithResponse(ctx context.Context, tenantId TenantId, reqEditors ...RequestEditorFn) (*ListIsolationTestsResponse, error) {
+	rsp, err := c.ListIsolationTests(ctx, tenantId, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseListIsolationTestsResponse(rsp)
+}
+
+// RecordIsolationTestWithBodyWithResponse Record an isolation test result (operator, interim only, FR-009)
+//
+// A pass for the stack's current hash enables the tenant's access policy.
+//
+// Takes any type of body and a specified content type, and returns a wrapper object for the known response body format(s).
+//
+// Corresponds with POST /tenants/{tenantId}/isolation-tests (the `RecordIsolationTest` operationId).
+func (c *ClientWithResponses) RecordIsolationTestWithBodyWithResponse(ctx context.Context, tenantId TenantId, params *RecordIsolationTestParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*RecordIsolationTestResponse, error) {
+	rsp, err := c.RecordIsolationTestWithBody(ctx, tenantId, params, contentType, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseRecordIsolationTestResponse(rsp)
+}
+
+// RecordIsolationTestWithResponse Record an isolation test result (operator, interim only, FR-009)
+//
+// A pass for the stack's current hash enables the tenant's access policy.
+//
+// Takes a body of the `application/json` content type, and returns a wrapper object for the known response body format(s).
+//
+// Corresponds with POST /tenants/{tenantId}/isolation-tests (the `RecordIsolationTest` operationId).
+func (c *ClientWithResponses) RecordIsolationTestWithResponse(ctx context.Context, tenantId TenantId, params *RecordIsolationTestParams, body RecordIsolationTestJSONRequestBody, reqEditors ...RequestEditorFn) (*RecordIsolationTestResponse, error) {
+	rsp, err := c.RecordIsolationTest(ctx, tenantId, params, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseRecordIsolationTestResponse(rsp)
+}
+
 // GetPostureRulesWithResponse Posture rules (FR-018)
 //
 // Returns a wrapper object for the known response body format(s).
@@ -7651,6 +8416,35 @@ func (c *ClientWithResponses) SuspendTenantWithResponse(ctx context.Context, ten
 	return ParseSuspendTenantResponse(rsp)
 }
 
+// ParseRecordRestoreTestResponse parses an HTTP response from a RecordRestoreTestWithResponse call
+func ParseRecordRestoreTestResponse(rsp *http.Response) (*RecordRestoreTestResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &RecordRestoreTestResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case rsp.StatusCode == 201:
+		break // No content-type
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && true:
+		var dest Problem
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.ApplicationproblemJSONDefault = &dest
+
+	}
+
+	return response, nil
+}
+
 // ParseListCellsResponse parses an HTTP response from a ListCellsWithResponse call
 func ParseListCellsResponse(rsp *http.Response) (*ListCellsResponse, error) {
 	bodyBytes, err := io.ReadAll(rsp.Body)
@@ -7733,6 +8527,39 @@ func ParseMarkGatewayPairPTAResponse(rsp *http.Response) (*MarkGatewayPairPTARes
 	switch {
 	case rsp.StatusCode == 200:
 		break // No content-type
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && true:
+		var dest Problem
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.ApplicationproblemJSONDefault = &dest
+
+	}
+
+	return response, nil
+}
+
+// ParseGetInterimResponse parses an HTTP response from a GetInterimWithResponse call
+func ParseGetInterimResponse(rsp *http.Response) (*GetInterimResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &GetInterimResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest InterimStatus
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
 
 	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && true:
 		var dest Problem
@@ -8368,6 +9195,72 @@ func ParseDraftInvoiceResponse(rsp *http.Response) (*DraftInvoiceResponse, error
 	switch {
 	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 201:
 		var dest Invoice
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON201 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && true:
+		var dest Problem
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.ApplicationproblemJSONDefault = &dest
+
+	}
+
+	return response, nil
+}
+
+// ParseListIsolationTestsResponse parses an HTTP response from a ListIsolationTestsWithResponse call
+func ParseListIsolationTestsResponse(rsp *http.Response) (*ListIsolationTestsResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &ListIsolationTestsResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest []IsolationTest
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && true:
+		var dest Problem
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.ApplicationproblemJSONDefault = &dest
+
+	}
+
+	return response, nil
+}
+
+// ParseRecordIsolationTestResponse parses an HTTP response from a RecordIsolationTestWithResponse call
+func ParseRecordIsolationTestResponse(rsp *http.Response) (*RecordIsolationTestResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &RecordIsolationTestResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 201:
+		var dest IsolationTest
 		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
 			return nil, err
 		}

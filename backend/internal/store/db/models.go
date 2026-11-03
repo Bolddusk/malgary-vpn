@@ -761,6 +761,15 @@ type AuditRecord struct {
 	SourceIp   *netip.Addr `json:"source_ip"`
 }
 
+type BackupRestoreTest struct {
+	ID            uuid.UUID `json:"id"`
+	BackupKey     string    `json:"backup_key"`
+	BackupTakenAt time.Time `json:"backup_taken_at"`
+	TestedAt      time.Time `json:"tested_at"`
+	Passed        bool      `json:"passed"`
+	Details       []byte    `json:"details"`
+}
+
 type CallExclusion struct {
 	TenantID uuid.UUID    `json:"tenant_id"`
 	Cidr     netip.Prefix `json:"cidr"`
@@ -773,6 +782,7 @@ type Cell struct {
 	Status    CellStatus `json:"status"`
 	MaxUsers  int32      `json:"max_users"`
 	CreatedAt time.Time  `json:"created_at"`
+	Interim   bool       `json:"interim"`
 }
 
 type CreditNote struct {
@@ -793,7 +803,7 @@ type GatewayPair struct {
 	PtaRegisteredAt   *time.Time `json:"pta_registered_at"`
 	PtaReference      *string    `json:"pta_reference"`
 	PrimaryHostID     uuid.UUID  `json:"primary_host_id"`
-	StandbyHostID     uuid.UUID  `json:"standby_host_id"`
+	StandbyHostID     *uuid.UUID `json:"standby_host_id"`
 	DedicatedTenantID *uuid.UUID `json:"dedicated_tenant_id"`
 }
 
@@ -859,6 +869,17 @@ type Invoice struct {
 	IssuedAt       *time.Time    `json:"issued_at"`
 	DueAt          *time.Time    `json:"due_at"`
 	CreatedAt      time.Time     `json:"created_at"`
+}
+
+type IsolationTestResult struct {
+	ID        uuid.UUID   `json:"id"`
+	TenantID  uuid.UUID   `json:"tenant_id"`
+	StackHash string      `json:"stack_hash"`
+	RanAt     time.Time   `json:"ran_at"`
+	Passed    bool        `json:"passed"`
+	EgressIp  *netip.Addr `json:"egress_ip"`
+	Results   []byte      `json:"results"`
+	RanBy     string      `json:"ran_by"`
 }
 
 type Payment struct {

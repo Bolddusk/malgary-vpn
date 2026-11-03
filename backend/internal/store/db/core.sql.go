@@ -51,7 +51,7 @@ func (q *Queries) CountSeatsHeld(ctx context.Context, tenantID uuid.UUID) (int64
 }
 
 const createCell = `-- name: CreateCell :one
-INSERT INTO cell (id, code, region, max_users) VALUES ($1, $2, $3, $4) RETURNING id, code, region, status, max_users, created_at
+INSERT INTO cell (id, code, region, max_users) VALUES ($1, $2, $3, $4) RETURNING id, code, region, status, max_users, created_at, interim
 `
 
 type CreateCellParams struct {
@@ -76,6 +76,7 @@ func (q *Queries) CreateCell(ctx context.Context, arg CreateCellParams) (Cell, e
 		&i.Status,
 		&i.MaxUsers,
 		&i.CreatedAt,
+		&i.Interim,
 	)
 	return i, err
 }
@@ -91,7 +92,7 @@ type CreateGatewayPairParams struct {
 	Name              string     `json:"name"`
 	EgressIp          netip.Addr `json:"egress_ip"`
 	PrimaryHostID     uuid.UUID  `json:"primary_host_id"`
-	StandbyHostID     uuid.UUID  `json:"standby_host_id"`
+	StandbyHostID     *uuid.UUID `json:"standby_host_id"`
 	DedicatedTenantID *uuid.UUID `json:"dedicated_tenant_id"`
 }
 
@@ -301,7 +302,7 @@ func (q *Queries) CreateTenantUser(ctx context.Context, arg CreateTenantUserPara
 }
 
 const getCell = `-- name: GetCell :one
-SELECT id, code, region, status, max_users, created_at FROM cell WHERE id = $1
+SELECT id, code, region, status, max_users, created_at, interim FROM cell WHERE id = $1
 `
 
 func (q *Queries) GetCell(ctx context.Context, id uuid.UUID) (Cell, error) {
@@ -314,12 +315,13 @@ func (q *Queries) GetCell(ctx context.Context, id uuid.UUID) (Cell, error) {
 		&i.Status,
 		&i.MaxUsers,
 		&i.CreatedAt,
+		&i.Interim,
 	)
 	return i, err
 }
 
 const getCellByCode = `-- name: GetCellByCode :one
-SELECT id, code, region, status, max_users, created_at FROM cell WHERE code = $1
+SELECT id, code, region, status, max_users, created_at, interim FROM cell WHERE code = $1
 `
 
 func (q *Queries) GetCellByCode(ctx context.Context, code string) (Cell, error) {
@@ -332,6 +334,7 @@ func (q *Queries) GetCellByCode(ctx context.Context, code string) (Cell, error) 
 		&i.Status,
 		&i.MaxUsers,
 		&i.CreatedAt,
+		&i.Interim,
 	)
 	return i, err
 }
@@ -626,7 +629,7 @@ func (q *Queries) InsertAudit(ctx context.Context, arg InsertAuditParams) error 
 }
 
 const listActiveCells = `-- name: ListActiveCells :many
-SELECT id, code, region, status, max_users, created_at FROM cell WHERE status = 'active' ORDER BY code
+SELECT id, code, region, status, max_users, created_at, interim FROM cell WHERE status = 'active' ORDER BY code
 `
 
 func (q *Queries) ListActiveCells(ctx context.Context) ([]Cell, error) {
@@ -645,6 +648,7 @@ func (q *Queries) ListActiveCells(ctx context.Context) ([]Cell, error) {
 			&i.Status,
 			&i.MaxUsers,
 			&i.CreatedAt,
+			&i.Interim,
 		); err != nil {
 			return nil, err
 		}
@@ -702,7 +706,7 @@ func (q *Queries) ListAudit(ctx context.Context, arg ListAuditParams) ([]AuditRe
 }
 
 const listCells = `-- name: ListCells :many
-SELECT id, code, region, status, max_users, created_at FROM cell ORDER BY code
+SELECT id, code, region, status, max_users, created_at, interim FROM cell ORDER BY code
 `
 
 func (q *Queries) ListCells(ctx context.Context) ([]Cell, error) {
@@ -721,6 +725,7 @@ func (q *Queries) ListCells(ctx context.Context) ([]Cell, error) {
 			&i.Status,
 			&i.MaxUsers,
 			&i.CreatedAt,
+			&i.Interim,
 		); err != nil {
 			return nil, err
 		}
@@ -1227,9 +1232,9 @@ func (q *Queries) UpdateTenantUser(ctx context.Context, arg UpdateTenantUserPara
 }
 
 const upsertCell = `-- name: UpsertCell :one
-INSERT INTO cell (id, code, region, max_users) VALUES ($1, $2, $3, $4)
+INSERT INTO cell (id, code, region, max_users, interim) VALUES ($1, $2, $3, $4, $5)
 ON CONFLICT (code) DO UPDATE SET region = EXCLUDED.region, max_users = EXCLUDED.max_users
-RETURNING id, code, region, status, max_users, created_at
+RETURNING id, code, region, status, max_users, created_at, interim
 `
 
 type UpsertCellParams struct {
@@ -1237,6 +1242,7 @@ type UpsertCellParams struct {
 	Code     string    `json:"code"`
 	Region   string    `json:"region"`
 	MaxUsers int32     `json:"max_users"`
+	Interim  bool      `json:"interim"`
 }
 
 func (q *Queries) UpsertCell(ctx context.Context, arg UpsertCellParams) (Cell, error) {
@@ -1245,6 +1251,7 @@ func (q *Queries) UpsertCell(ctx context.Context, arg UpsertCellParams) (Cell, e
 		arg.Code,
 		arg.Region,
 		arg.MaxUsers,
+		arg.Interim,
 	)
 	var i Cell
 	err := row.Scan(
@@ -1254,6 +1261,7 @@ func (q *Queries) UpsertCell(ctx context.Context, arg UpsertCellParams) (Cell, e
 		&i.Status,
 		&i.MaxUsers,
 		&i.CreatedAt,
+		&i.Interim,
 	)
 	return i, err
 }
@@ -1272,7 +1280,7 @@ type UpsertGatewayPairParams struct {
 	Name          string     `json:"name"`
 	EgressIp      netip.Addr `json:"egress_ip"`
 	PrimaryHostID uuid.UUID  `json:"primary_host_id"`
-	StandbyHostID uuid.UUID  `json:"standby_host_id"`
+	StandbyHostID *uuid.UUID `json:"standby_host_id"`
 }
 
 func (q *Queries) UpsertGatewayPair(ctx context.Context, arg UpsertGatewayPairParams) (GatewayPair, error) {

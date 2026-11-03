@@ -76,3 +76,19 @@ groups:
         annotations:
           summary: "{{ $labels.component }} security release unapplied for {{ $value }} days (7-day window, Principle VI)"
           runbook_url: https://github.com/malgary/malgary-vpn/blob/main/docs/runbooks/upgrade-netbird.md
+
+  # Interim Hosting Exception (feature 002). The metrics only exist while MALGARY_INTERIM=true.
+  - name: interim
+    rules:
+      - alert: InterimExitDue
+        expr: malgary_interim_days_left <= 30
+        labels: {severity: warning}
+        annotations:
+          summary: "Interim host must be left in {{ $value }} days (by 2027-02-28); new users stop after that"
+          runbook_url: https://github.com/Bolddusk/malgary-vpn/blob/main/docs/runbooks/interim-exit.md
+
+      - alert: InterimUserLimitNear
+        expr: malgary_interim_users_used >= 9
+        labels: {severity: warning}
+        annotations:
+          summary: "{{ $value }} of 10 interim users used; the 11th requires the dedicated cell"

@@ -21,6 +21,7 @@ import (
 	"malgary/backend/internal/billing/providers"
 	"malgary/backend/internal/httpapi"
 	"malgary/backend/internal/httpapi/gen"
+	"malgary/backend/internal/interim"
 	"malgary/backend/internal/store"
 	"malgary/backend/internal/store/db"
 )
@@ -36,6 +37,7 @@ type Service struct {
 	Providers map[string]providers.Provider
 	Proofs    ObjectStore
 	Now       func() time.Time
+	Interim   *interim.Limits // nil or inactive on dedicated cells
 }
 
 func (s *Service) now() time.Time {
@@ -394,6 +396,9 @@ func (s *Service) usableVersion(ctx context.Context, q *db.Queries, t db.Tenant,
 	}
 	if v.Status != db.PlanVersionStatusPublished {
 		return db.PlanVersion{}, bad(fmt.Sprintf("plan %s version %d is %s; only the published version can be subscribed to", code, version, v.Status))
+	}
+	if err := s.Interim.CheckPlanPrice(t.Slug, v.PricePerSeatMinor); err != nil {
+		return db.PlanVersion{}, err
 	}
 	return v, nil
 }

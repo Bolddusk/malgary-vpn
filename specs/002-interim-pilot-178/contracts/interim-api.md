@@ -7,7 +7,7 @@ Added to `backend/api/openapi.yaml`; all are no-ops (404) when `MALGARY_INTERIM=
 | `POST /v1/tenants/{id}/isolation-tests` | operator | Record a result `{stackHash, passed, egressIp, results[]}` from `malgaryctl isolation-test`. A pass for the current hash enables the tenant's access policy. | FR-009 |
 | `GET /v1/tenants/{id}/isolation-tests` | owner, operator | History | FR-009 |
 | `POST /v1/backups/restore-tests` | operator | Record a restore test `{backupKey, backupTakenAt, passed, details}` | FR-015 |
-| `GET /v1/interim` | owner, operator, tenant_admin | `{active, maxUsers, usersUsed, until, daysLeft, egressNote}` | FR-010–FR-012 |
+| `GET /v1/interim` | owner, operator (tenants see the egress note on their setup page) | `{active, maxUsers, usersUsed, until, daysLeft, egressNote}` | FR-010–FR-012 |
 
 Changed (not interim-only), FR-012a: when `MALGARY_INVITE_DELIVERY=link`, the user import
 response includes `inviteLink` (one-time Zitadel invitation URL) for each managed-account user

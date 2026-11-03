@@ -25,6 +25,7 @@ type Deps struct {
 	Users   UsersService
 	Billing BillingService
 	Ops     OpsService
+	Interim InterimService
 	// ClaimsSigningKey verifies Zitadel Actions v2 calls to /hooks/zitadel/claims.
 	ClaimsSigningKey []byte
 }

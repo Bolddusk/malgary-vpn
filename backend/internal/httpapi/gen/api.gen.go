@@ -81,6 +81,42 @@ func (e InvoiceStatus) Valid() bool {
 	}
 }
 
+// Defines values for IsolationProbeExpected.
+const (
+	IsolationProbeExpectedBlocked   IsolationProbeExpected = "blocked"
+	IsolationProbeExpectedReachable IsolationProbeExpected = "reachable"
+)
+
+// Valid indicates whether the value is a known member of the IsolationProbeExpected enum.
+func (e IsolationProbeExpected) Valid() bool {
+	switch e {
+	case IsolationProbeExpectedBlocked:
+		return true
+	case IsolationProbeExpectedReachable:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for IsolationProbeGot.
+const (
+	IsolationProbeGotBlocked   IsolationProbeGot = "blocked"
+	IsolationProbeGotReachable IsolationProbeGot = "reachable"
+)
+
+// Valid indicates whether the value is a known member of the IsolationProbeGot enum.
+func (e IsolationProbeGot) Valid() bool {
+	switch e {
+	case IsolationProbeGotBlocked:
+		return true
+	case IsolationProbeGotReachable:
+		return true
+	default:
+		return false
+	}
+}
+
 // Defines values for PlanStatus.
 const (
 	PlanStatusActive  PlanStatus = "active"
@@ -197,11 +233,16 @@ const (
 	EntitlementMissing           ProblemCode = "entitlement_missing"
 	GatewayNotPtaRegistered      ProblemCode = "gateway_not_pta_registered"
 	IdempotencyConflict          ProblemCode = "idempotency_conflict"
+	InterimExpired               ProblemCode = "interim_expired"
+	InterimTenantNotAllowed      ProblemCode = "interim_tenant_not_allowed"
+	InterimUserLimit             ProblemCode = "interim_user_limit"
 	Internal                     ProblemCode = "internal"
 	InvalidRequest               ProblemCode = "invalid_request"
+	IsolationTestRequired        ProblemCode = "isolation_test_required"
 	NotFound                     ProblemCode = "not_found"
 	PlanVersionImmutable         ProblemCode = "plan_version_immutable"
 	PreconditionFailed           ProblemCode = "precondition_failed"
+	RestoreTestRequired          ProblemCode = "restore_test_required"
 	RoutingRuleEmptyDestinations ProblemCode = "routing_rule_empty_destinations"
 	SeatLimitReached             ProblemCode = "seat_limit_reached"
 	StackNotReady                ProblemCode = "stack_not_ready"
@@ -218,15 +259,25 @@ func (e ProblemCode) Valid() bool {
 		return true
 	case IdempotencyConflict:
 		return true
+	case InterimExpired:
+		return true
+	case InterimTenantNotAllowed:
+		return true
+	case InterimUserLimit:
+		return true
 	case Internal:
 		return true
 	case InvalidRequest:
+		return true
+	case IsolationTestRequired:
 		return true
 	case NotFound:
 		return true
 	case PlanVersionImmutable:
 		return true
 	case PreconditionFailed:
+		return true
+	case RestoreTestRequired:
 		return true
 	case RoutingRuleEmptyDestinations:
 		return true
@@ -651,10 +702,31 @@ type IdentitySignInMethods string
 
 // ImportResult defines model for ImportResult.
 type ImportResult struct {
-	Created   int `json:"created"`
-	Existing  int `json:"existing"`
-	SeatsPaid int `json:"seatsPaid"`
-	SeatsUsed int `json:"seatsUsed"`
+	Created  int `json:"created"`
+	Existing int `json:"existing"`
+
+	// Invites One-time invitation links for managed-account users, only when invitations are
+	// delivered as links (FR-012a). Shown once; never stored by Malgary.
+	Invites   *[]InviteLink `json:"invites,omitempty"`
+	SeatsPaid int           `json:"seatsPaid"`
+	SeatsUsed int           `json:"seatsUsed"`
+}
+
+// InterimStatus defines model for InterimStatus.
+type InterimStatus struct {
+	Active            bool                `json:"active"`
+	DaysLeft          *int                `json:"daysLeft,omitempty"`
+	EgressNote        *string             `json:"egressNote,omitempty"`
+	MaxUsers          *int                `json:"maxUsers,omitempty"`
+	RestoreTestPassed *bool               `json:"restoreTestPassed,omitempty"`
+	Until             *openapi_types.Date `json:"until,omitempty"`
+	UsersUsed         *int                `json:"usersUsed,omitempty"`
+}
+
+// InviteLink defines model for InviteLink.
+type InviteLink struct {
+	Email string `json:"email"`
+	Url   string `json:"url"`
 }
 
 // Invoice defines model for Invoice.
@@ -681,6 +753,40 @@ type Invoice struct {
 
 // InvoiceStatus defines model for Invoice.Status.
 type InvoiceStatus string
+
+// IsolationProbe defines model for IsolationProbe.
+type IsolationProbe struct {
+	Expected IsolationProbeExpected `json:"expected"`
+	Got      IsolationProbeGot      `json:"got"`
+
+	// Target host:port or URL
+	Target string `json:"target"`
+}
+
+// IsolationProbeExpected defines model for IsolationProbe.Expected.
+type IsolationProbeExpected string
+
+// IsolationProbeGot defines model for IsolationProbe.Got.
+type IsolationProbeGot string
+
+// IsolationTest defines model for IsolationTest.
+type IsolationTest struct {
+	EgressIp  *string            `json:"egressIp,omitempty"`
+	Id        openapi_types.UUID `json:"id"`
+	Passed    bool               `json:"passed"`
+	RanAt     time.Time          `json:"ranAt"`
+	RanBy     string             `json:"ranBy"`
+	Results   []IsolationProbe   `json:"results"`
+	StackHash string             `json:"stackHash"`
+}
+
+// IsolationTestInput defines model for IsolationTestInput.
+type IsolationTestInput struct {
+	EgressIp  *string          `json:"egressIp,omitempty"`
+	Passed    bool             `json:"passed"`
+	Results   []IsolationProbe `json:"results"`
+	StackHash string           `json:"stackHash"`
+}
 
 // Money defines model for Money.
 type Money struct {
@@ -805,6 +911,14 @@ type ProblemCode string
 // Reason defines model for Reason.
 type Reason struct {
 	Reason string `json:"reason"`
+}
+
+// RestoreTestInput defines model for RestoreTestInput.
+type RestoreTestInput struct {
+	BackupKey     string                 `json:"backupKey"`
+	BackupTakenAt time.Time              `json:"backupTakenAt"`
+	Details       map[string]interface{} `json:"details"`
+	Passed        bool                   `json:"passed"`
 }
 
 // RoutingRule defines model for RoutingRule.
@@ -1071,6 +1185,11 @@ type TenantId = openapi_types.UUID
 // UserId defines model for UserId.
 type UserId = openapi_types.UUID
 
+// RecordRestoreTestParams defines parameters for RecordRestoreTest.
+type RecordRestoreTestParams struct {
+	IdempotencyKey *IdempotencyKey `json:"Idempotency-Key,omitempty"`
+}
+
 // MarkGatewayPairPTAJSONBody defines parameters for MarkGatewayPairPTA.
 type MarkGatewayPairPTAJSONBody struct {
 	Reference    string    `json:"reference"`
@@ -1147,6 +1266,11 @@ type DraftInvoiceParams struct {
 	IdempotencyKey *IdempotencyKey `json:"Idempotency-Key,omitempty"`
 }
 
+// RecordIsolationTestParams defines parameters for RecordIsolationTest.
+type RecordIsolationTestParams struct {
+	IdempotencyKey *IdempotencyKey `json:"Idempotency-Key,omitempty"`
+}
+
 // PutPostureRulesJSONBody defines parameters for PutPostureRules.
 type PutPostureRulesJSONBody = []PostureRule
 
@@ -1214,6 +1338,9 @@ type SuspendTenantParams struct {
 	IdempotencyKey *IdempotencyKey `json:"Idempotency-Key,omitempty"`
 }
 
+// RecordRestoreTestJSONRequestBody defines body for RecordRestoreTest for application/json ContentType.
+type RecordRestoreTestJSONRequestBody = RestoreTestInput
+
 // MarkGatewayPairPTAJSONRequestBody defines body for MarkGatewayPairPTA for application/json ContentType.
 type MarkGatewayPairPTAJSONRequestBody MarkGatewayPairPTAJSONBody
 
@@ -1244,6 +1371,9 @@ type PutIdentityJSONRequestBody = Identity
 // DraftInvoiceJSONRequestBody defines body for DraftInvoice for application/json ContentType.
 type DraftInvoiceJSONRequestBody DraftInvoiceJSONBody
 
+// RecordIsolationTestJSONRequestBody defines body for RecordIsolationTest for application/json ContentType.
+type RecordIsolationTestJSONRequestBody = IsolationTestInput
+
 // PutPostureRulesJSONRequestBody defines body for PutPostureRules for application/json ContentType.
 type PutPostureRulesJSONRequestBody = PutPostureRulesJSONBody
 
@@ -1270,6 +1400,9 @@ type SuspendTenantJSONRequestBody = Reason
 
 // ServerInterface represents all server handlers.
 type ServerInterface interface {
+	// RecordRestoreTest Record a backup restore test (operator, interim only, FR-015)
+	// (POST /backups/restore-tests)
+	RecordRestoreTest(w http.ResponseWriter, r *http.Request, params RecordRestoreTestParams)
 	// ListCells Cells (owner, operator)
 	// (GET /cells)
 	ListCells(w http.ResponseWriter, r *http.Request)
@@ -1279,6 +1412,9 @@ type ServerInterface interface {
 	// MarkGatewayPairPTA Record PTA registration of a pair's egress IP (owner, FR-011)
 	// (POST /gateway-pairs/{name}:pta)
 	MarkGatewayPairPTA(w http.ResponseWriter, r *http.Request, name string)
+	// GetInterim Interim hosting limits and usage (FR-010 to FR-012)
+	// (GET /interim)
+	GetInterim(w http.ResponseWriter, r *http.Request)
 	// RecordPayment Record a manual payment with reference and optional proof (owner, FR-016c)
 	// (POST /invoices/{invoiceId}/payments)
 	RecordPayment(w http.ResponseWriter, r *http.Request, invoiceId InvoiceId, params RecordPaymentParams)
@@ -1336,6 +1472,12 @@ type ServerInterface interface {
 	// DraftInvoice Draft an invoice for a subscription period (owner)
 	// (POST /tenants/{tenantId}/invoices)
 	DraftInvoice(w http.ResponseWriter, r *http.Request, tenantId TenantId, params DraftInvoiceParams)
+	// ListIsolationTests Isolation test history, newest first (interim only)
+	// (GET /tenants/{tenantId}/isolation-tests)
+	ListIsolationTests(w http.ResponseWriter, r *http.Request, tenantId TenantId)
+	// RecordIsolationTest Record an isolation test result (operator, interim only, FR-009)
+	// (POST /tenants/{tenantId}/isolation-tests)
+	RecordIsolationTest(w http.ResponseWriter, r *http.Request, tenantId TenantId, params RecordIsolationTestParams)
 	// GetPostureRules Posture rules (FR-018)
 	// (GET /tenants/{tenantId}/posture-rules)
 	GetPostureRules(w http.ResponseWriter, r *http.Request, tenantId TenantId)
@@ -1393,6 +1535,12 @@ type ServerInterface interface {
 
 type Unimplemented struct{}
 
+// RecordRestoreTest Record a backup restore test (operator, interim only, FR-015)
+// (POST /backups/restore-tests)
+func (_ Unimplemented) RecordRestoreTest(w http.ResponseWriter, r *http.Request, params RecordRestoreTestParams) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
 // ListCells Cells (owner, operator)
 // (GET /cells)
 func (_ Unimplemented) ListCells(w http.ResponseWriter, r *http.Request) {
@@ -1408,6 +1556,12 @@ func (_ Unimplemented) GetCellCapacity(w http.ResponseWriter, r *http.Request, c
 // MarkGatewayPairPTA Record PTA registration of a pair's egress IP (owner, FR-011)
 // (POST /gateway-pairs/{name}:pta)
 func (_ Unimplemented) MarkGatewayPairPTA(w http.ResponseWriter, r *http.Request, name string) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// GetInterim Interim hosting limits and usage (FR-010 to FR-012)
+// (GET /interim)
+func (_ Unimplemented) GetInterim(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusNotImplemented)
 }
 
@@ -1525,6 +1679,18 @@ func (_ Unimplemented) DraftInvoice(w http.ResponseWriter, r *http.Request, tena
 	w.WriteHeader(http.StatusNotImplemented)
 }
 
+// ListIsolationTests Isolation test history, newest first (interim only)
+// (GET /tenants/{tenantId}/isolation-tests)
+func (_ Unimplemented) ListIsolationTests(w http.ResponseWriter, r *http.Request, tenantId TenantId) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// RecordIsolationTest Record an isolation test result (operator, interim only, FR-009)
+// (POST /tenants/{tenantId}/isolation-tests)
+func (_ Unimplemented) RecordIsolationTest(w http.ResponseWriter, r *http.Request, tenantId TenantId, params RecordIsolationTestParams) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
 // GetPostureRules Posture rules (FR-018)
 // (GET /tenants/{tenantId}/posture-rules)
 func (_ Unimplemented) GetPostureRules(w http.ResponseWriter, r *http.Request, tenantId TenantId) {
@@ -1636,6 +1802,47 @@ type ServerInterfaceWrapper struct {
 
 type MiddlewareFunc func(http.Handler) http.Handler
 
+// RecordRestoreTest operation middleware
+func (siw *ServerInterfaceWrapper) RecordRestoreTest(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params RecordRestoreTestParams
+
+	headers := r.Header
+
+	// ------------- Optional header parameter "Idempotency-Key" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("Idempotency-Key")]; found {
+		var IdempotencyKey IdempotencyKey
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "Idempotency-Key", Count: n})
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "Idempotency-Key", valueList[0], &IdempotencyKey, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false, Type: "string", Format: ""})
+		if err != nil {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "Idempotency-Key", Err: err})
+			return
+		}
+
+		params.IdempotencyKey = &IdempotencyKey
+
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.RecordRestoreTest(w, r, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
 // ListCells operation middleware
 func (siw *ServerInterfaceWrapper) ListCells(w http.ResponseWriter, r *http.Request) {
 
@@ -1693,6 +1900,20 @@ func (siw *ServerInterfaceWrapper) MarkGatewayPairPTA(w http.ResponseWriter, r *
 
 	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		siw.Handler.MarkGatewayPairPTA(w, r, name)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// GetInterim operation middleware
+func (siw *ServerInterfaceWrapper) GetInterim(w http.ResponseWriter, r *http.Request) {
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.GetInterim(w, r)
 	}))
 
 	for _, middleware := range siw.HandlerMiddlewares {
@@ -2473,6 +2694,82 @@ func (siw *ServerInterfaceWrapper) DraftInvoice(w http.ResponseWriter, r *http.R
 
 	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		siw.Handler.DraftInvoice(w, r, tenantId, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// ListIsolationTests operation middleware
+func (siw *ServerInterfaceWrapper) ListIsolationTests(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "tenantId" -------------
+	var tenantId TenantId
+
+	err = runtime.BindStyledParameterWithOptions("simple", "tenantId", chi.URLParam(r, "tenantId"), &tenantId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid", ValueIsUnescaped: r.URL.RawPath == ""})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "tenantId", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.ListIsolationTests(w, r, tenantId)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// RecordIsolationTest operation middleware
+func (siw *ServerInterfaceWrapper) RecordIsolationTest(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "tenantId" -------------
+	var tenantId TenantId
+
+	err = runtime.BindStyledParameterWithOptions("simple", "tenantId", chi.URLParam(r, "tenantId"), &tenantId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid", ValueIsUnescaped: r.URL.RawPath == ""})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "tenantId", Err: err})
+		return
+	}
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params RecordIsolationTestParams
+
+	headers := r.Header
+
+	// ------------- Optional header parameter "Idempotency-Key" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("Idempotency-Key")]; found {
+		var IdempotencyKey IdempotencyKey
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "Idempotency-Key", Count: n})
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "Idempotency-Key", valueList[0], &IdempotencyKey, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false, Type: "string", Format: ""})
+		if err != nil {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "Idempotency-Key", Err: err})
+			return
+		}
+
+		params.IdempotencyKey = &IdempotencyKey
+
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.RecordIsolationTest(w, r, tenantId, params)
 	}))
 
 	for _, middleware := range siw.HandlerMiddlewares {
@@ -3435,6 +3732,18 @@ func HandlerWithOptions(si ServerInterface, options ChiServerOptions) http.Handl
 	r.Group(func(r chi.Router) {
 		r.Post(options.BaseURL+"/tenants/{tenantId}/stack:report", wrapper.ReportStack)
 	})
+	r.Group(func(r chi.Router) {
+		r.Get(options.BaseURL+"/tenants/{tenantId}/isolation-tests", wrapper.ListIsolationTests)
+	})
+	r.Group(func(r chi.Router) {
+		r.Post(options.BaseURL+"/tenants/{tenantId}/isolation-tests", wrapper.RecordIsolationTest)
+	})
+	r.Group(func(r chi.Router) {
+		r.Post(options.BaseURL+"/backups/restore-tests", wrapper.RecordRestoreTest)
+	})
+	r.Group(func(r chi.Router) {
+		r.Get(options.BaseURL+"/interim", wrapper.GetInterim)
+	})
 
 	return r
 }
@@ -3444,94 +3753,105 @@ func HandlerWithOptions(si ServerInterface, options ChiServerOptions) http.Handl
 // const string: with thousands of chunks the chained `+` fold is several
 // times slower for the Go compiler than parsing a slice literal.
 var swaggerSpec = []string{
-	"1H1tc9s2tvBfwfDZmSeZS0tykmb2qp/cJM16b9NoYqc7s6mvDZNHEhoSYAFQidaj/34HL6RAEaRIiXLS",
-	"L61jgAfAecE5OG9+CCKWZowClSKYPgQZ5jgFCVz/61XOBePqJ0KDafBnDnwdhAHFKQTTIDKjYSCiJaRY",
-	"TZPrTI0IyQldBJtNGFzGkGZMAo3W/wPrEtQScAx8C8uZdqbmuUBT/PUXoAu5DKbnz/4e+haZv8MyWjZD",
-	"n5+ZCXv2SleMRHAZl4AyLJdbMKQcDwMOf+aEQxxMJc/BhTtnPMUymAZ5TtTM+jq/kJTIJqwmetAFGMMc",
-	"54kMpj9MQoUMkuZpMH02Uf8i1PzrvFyHUAkL4HqhWYJp42kyM3jcUa6BYiob15DF8HGrfBTAG9fIzeAx",
-	"K2zUxyJjVIDm+xln9wmk6seIUQlUUwtnWUIiLAmj48zM+K8/BKNqbLvW3zjMg2nw/8ZbwRqbUTEu4OoV",
-	"YxARJ5kCF0yDN5wzQzQ7WcG6yGMifyFCL59xlgGXxGyRSEirP7QtrAF9gIjxONiU58ec47X6N4Wvcivr",
-	"dfxvMfvJrndTAmH3f0AkFRR3kdp+cWQOWgMfqiFmyesfu9a/9Y3OJegt4zgmCj5OZs6qhg1q+8SywhMx",
-	"lnAmSQp1xgiDe5gzDr2XIHEHtgsDifkCZMPRzWDD2XeJosBjGbgI2yI2LLBfAeos76PmK0iSOhkjFvtJ",
-	"0fHEKf6qhFk4MMoLSx1p0cQkQmKZi46Y0LsswZUfO8s3nfgVznBE5NpzcouP2s6WTMiqJFY/bD+yucQ8",
-	"YDlL/APqvhOzBEcQ+0BuPCfblff2Le1fwEW4xkv1I2eBAj0+fL/lLM88N1s3TvpMqJ4IVOm/T4EEnCpS",
-	"r4WENLjxfJFCet+XDj7u0lPtBhrPdUmzXDbfG3OcCAh3OUVv8E2KSVJlqBIZoMa8N8nujW6P49hOL19o",
-	"e6E0pXyKtnaWyxiotPLQ4yQ4SdgXiF+zFBNaPcverdtvB0FDOscfSvI5llTl2r5nLAFM1XxBFvSSvgO5",
-	"ZHF17YLNhGCavyleQOxnM0IvzVfn9Q3lmZAccHoZZ92198ftR/VD7nBo9QQ+9rxMM8blBxAaE7VrjgOW",
-	"fsEPA/hKhFTH9I4KwFLMMIlbhj+KbpeK3YWzpAvAXct7RGOoe06Xc67eGF5GjHO46GEadLyniBA5xH0A",
-	"J4RCm0LBKcupfEco4xWghMqXL4LQg/qKqek5+Z85LqW8/nVOiZxxEkH3JbsoIZqr2867nwyTuM/5MuCE",
-	"xW9oXEOyD79m9pXEXHaavzU9iksg5ngug4K2gdlwEAYrRvx3gsjvJZM46XMoib/2mt4Pvk+xlWZSKSYV",
-	"sAVn+iTuHaOwHoJVXQnNsJTAaTAN/vfTxdm/bx6eb/7mfR+6J3GXdMD5Nj3D69S+7Ybc9sE3het+2Ds7",
-	"44zN3+uzWMeKb8qKxMBbBy0SPsDcO41DBGTV5wLzcZbrOSl3FTbRqrJqC+EOsbH2kbbNo3IId4ZBqnXx",
-	"r0xCEx3Y/Ccs4OULY6K4XgGWmWMhPQvNSQIhEpJxiBGh6CrDEYhG7viZJND8vuhNWPXNHNT5NcR9tmQH",
-	"oazswgXvJXqCaY8HKVAJPONEgPFRXSX54hjpbERkXT2o1/bKPEClxoBPJayAC8JodytQnf8385FPna6I",
-	"IPcksVq82EqW3yckClx0BDf7qOW+oe1jx4Hu6InyDE30OkRCC4q68oXP/nOj/jM5+++zm4fz8MXEL2ud",
-	"id5IzQHR2IjBJmwV1DUPqPfzYPqpM0sYTG/CA1/T+oBi2e86aDaMSnCBsn0y4ALidjno8CgwJpadXq5e",
-	"R+ZNFZ2H8OA9SRJCFzNtKboHTBmVy0QJAaY0x4n3SIdoCf3MTiAtAjG93I0p/noF2HzYrsBSQjvOzJTF",
-	"PwOupndQlxMfDAk87eCzqy9V0RFVYjhn2MGaV6yYkDmHD3nieQ0utKOmo3HWbVpK6KuEAJW/1di6Mul9",
-	"C5GbfSTFuTbNJ73KIOrrdvp2e97GWfw6oPS6AJa3OjJ2ywFH5mJRAaxbex/ckjTNJb5PoMoVtykRwrgP",
-	"OMuVI+GW5wncQprJ9W0MQhKqIzraitI641bkIgMa6zXINi55GzE6T0gkzd0Tfb6lTG8n1tE7Jm/nLKfW",
-	"2sUJiW8Vj4NQ83OKc7lknPzH7JxDxKjB4+0ck0T/doElfMFrDTaT+Fa5r4UEbjZCJXDacOHEIJVDrJPf",
-	"3BVPhaUW2u2TW2nDCBqM+3xU1PNJ4wfANl5WJTcvf+8Ylc/36Vf7lXchQ2u/2Feo3ss1me6w5TxPkluZ",
-	"UwpJEFbh+sgkIpZB1WetGC4IzU1kvejNn9o3WvWJoD9FjCP1LSLxjwjfC6ASzRlH5QL7Y6wuZs1G7Xn3",
-	"4NfjoIpwkrz5GiW56I9imM/BmM/NDrBSEKcPHh/utyMvy3lUAaDJuaWupYbv27yMcPejVBn8biTV7iF5",
-	"QbNOjw5XkPa5ng1kl4QtrHOtY489NdU3Iu3OORtRfaW0wgfIGPf5lFT2AMT/wGLp3XE1D+dQLRsGKQiB",
-	"F52fqmZX6oYwamjv6d1ztBjhYXCV31e8zj5PvJz18txWPuruwD3Ktu76gDIuqVmryy3B9FWTvyKrPgDr",
-	"2rrdSV8nreQEJ8b0KR0SGRbyNs5BP8u2Vk6EqQrjdiE/iQPnINVtO3t0rIFdzOzjlVdLTBfQ82bog9r2",
-	"d4+L5vaZg1stLhberPye6UgyP3P1yWqZc5b+hpP8ZIktW9TUhiQ7bGXZPRHG2qXbfJi92D7ER+CR+DK+",
-	"HKRYewcGiD49Pmfvvs47CHsXGTceuR6JNTYIfIKYbAILnPza5AI0wX11no/cvzMK8p7wuO29LEDmWdP3",
-	"osktqd+VV7WrXF3U9ibfr699ukDHXNRed/SBqwTYfH7PMLcLxZCA7KwQ9IFcvLqvQZMgVMVq9ajN7PIa",
-	"5oSSwoRolc7qsyhiVHIcSTE2VvdZXEIapXGIsED/vHr/a1CLD2XEIWvp9sPJAvP1iLDx6tyL8910pOtm",
-	"Wz8FiWMscc/7psK0rcGXLYO1+dCfTzb2nzf7o6o1AvtIJvr7nnCc7iYI9fja5AF1yAzaOY2Z1eW11Hg5",
-	"WWfNwVvPMOmQbKtn+fbZmmREnKSttsddmdylNIlxH+4NQjlexk3pU+sb4TnCP1Cq2E7vVvvK3EVrAcTL",
-	"xDvPluMsAq/G/qaq/Dg1Xrv8ofi2gjdHPrZMsheac/faC9W5LO310qwqhsiTN5BOlyLvZvL1lBntoW9I",
-	"FTeDVxBxkF4nodBD0/EYlTH2EFFYAUdyCWilLXL/y5ljt8bDm/1cJHp6J+gcKd7qZS505oKxReHA54ri",
-	"jMTRfgtEj3qxXThCdliCGvvn+STud/dohF1SIbF+K/f6Ni/yrZt9mhSiaual49QsNV3dlsVCXgHQHlkc",
-	"X39aSxBd88p6zT7aj9lVNXu+F0GNRGGF2H4eAd6bGjGsSAQNUZVmUmk/cE991/VF05sL9hYelLavzkrf",
-	"hse0ydbx3UHoipg83vLJEROhwnTqdxxStur8xihMO72/Vs+jLhdL/W7YzibjYeTai1XHRVDgtS+iOxuz",
-	"Cg9DaEUF54Q6UagkRFu+2UMjHkKeIXm7ztE3HUoqFCiIck7k+kqh1+abAObAtz/9XDDnP/91XdSC6jvI",
-	"zCuhLqXMTDUhoXNW1/vXS0DvzNsV3ePoM9AYXcwu0RNlS4nxZHJ+Jgnw87OMJEyOt49mO/kMZ2SUxk9H",
-	"6JW+UNH9+nd6Z1/DkUzuVBaisiD09yHCVE3RvzE2CVJSiBMzgKPPZ2w+JxEg5YFEc8Ay54Amk2ej3+nv",
-	"9Axd5HI5Re8vX79C5qhIss9ABTKZ1gp2cRxV6HBGKHrybyJxDMnTkQJgbBVknpUowhQxmqyRThpQ2yIc",
-	"sS/UxkV/RJiuEZNLKCKliIPMORXoxeSFhvdmBXyNZu+vrhGOIsikQHc7tcp3I/QxU1etUCFYdPfmGi/u",
-	"0BjdFVXHdwYS54wLhDmgu6ZK0jv0hcglwmhOvkKM7lQgXX1dBtmnQXH8n7bUdLKipsH5aDKaKIZlGVCc",
-	"kWAaPB9NRs+1dS+XmtvG6lVrZMiE4JRY6d0o1R2oK+OVnrFTFvtsMmkpia2Xwna6XNRKHvVeK5A1O9r/",
-	"Aix37FTbqtdJmmK+LuCgJ+wLBR4ic3LGn+pZBjHjB/W/y3gzjpxqQC+q3oKsVA0eibB9eCrX8eGnHDsa",
-	"Rbp0D2W6mA/hBSZUSFTgIkQZcKTMfhP22vYL+OQtzza4PKo8WyX0je2D8ky5RMT4QUHfTDPjRdu/C/2/",
-	"tj3U1jQukTrJ32H++a3ZywwTPru+sHBByJ9YvO5F8N00mK7p1WGwTQ46ODO/AqI9+3qz2cXdxs/qVZ40",
-	"xeAQD8CTBhSaXV8gs29DEsTmCCPFE/9fIFhwEAJdzkrx/vnD2eT83Aq3LUIQ44eyHGEzti4P4WEj3za3",
-	"U8bbbhHNzGJ2XdSZhH1XqPbO2NwYIhzCaK0+PbeaohOpz4de23ehDc88GJmwHLJEN9q25HttpOxUXFQY",
-	"6WXUwklTbaKcho0uFWg7cRguOpGSKvboIeelqZU7npgaEMJI55ojS4ARuhDKIhTa9jSlhT/qn+0EdA8R",
-	"S0GgMlF0ZGipnKHtttBMz3gMW0it1MUWMjs6HpUajpECYxsXBR2W758WkYE6Yl7p4OzMOpS/y2utrD95",
-	"7DtNU9Fjodmi5gFsWA1JKb4E0y2tSnYeP5jmPpuxW2XUj0q2d1DzpfRayd+sEkr4bvmgWiTz+OxQoMjD",
-	"FRqNKBqMNww8jCh8MexhWaATm4wf7E+bqS3hOZxxQq8hvq3fabbFWyNajfw4MxsenCNPpCr3sMWsrKAa",
-	"4Jo3sEqdaWkwQso9lHFYEZYLVNZslRxTqMxtBVehM22AUHGQ/XEz/gL3S8Y+i24PMqcKeIBHWRGx/JfZ",
-	"wxEvsh45aV2uEU9N74X2Ix1DWOs/DKafbipktlZtgVpkKTJCV2RBtavtbAWczAnE2yriguVlsh4pt5eu",
-	"GzB2sqW2cY2120jXdk5fibPu4024d6ZpmndSkXTiyB6JLI54vDyqFazD0euJare5rouaju9S29bStrr7",
-	"DgZc36toyz0hm0WHJEOYoqLFTOEDfkLZGcsQmaOcRjoZOdZEGdIoaN6mGSkMgh+RzpNDbgKf+hUf1JBU",
-	"1UPahY1wgQTtoC//tU2eK8yIESoZSlbvifFD0fVx0+Y3Ldn4G7BCubZpFKpXVm77Kuxal8jj8f0W5Bap",
-	"+t1lyGuiS9oBsc2TRB8//OLxse6R8zJbw7hN60QZY9WnsfU2150c/9p3+bZ1pof+ehBx7RUa4kKvwDOF",
-	"d0sorxPlO3r28ukpSLmNgTbS8q2Z8hjuC71UF/+F3dNAmnRRQjsYve0a962t3/suFa7TbfCRH7aW3I/i",
-	"6FjYtdrEYPxgC/o3xuhOQEKdpK/17wuS7jfXX9tE+AFe5hrS9jCH86v/aW1Pf1yoTW3K5mLsPLHUrw+U",
-	"BNue+3sRgcnpRcBkBAwTu1DkLbhGmWrGJkVFO9MmoXCzwJuMsDID/JQxgWINX1DAjiEBUpngIhjGxiqS",
-	"Q1ywxyiH3OtvctH3fUlEFeePJw9ttB5OJK4cCpvuaiJERWdVdBnPRIhsF1kUmxa02rR+9/OFscYmz0xE",
-	"b/LcRvaeP20WIxvrazWyLotJj2FmlUG2/YZWua8Bwm4W1I55exKzS/uwB413DpGe0a9yc7f0wvn4sPyK",
-	"88eI0p4oGkHLMKziHozcYhFkUFONT3gE0VYonZUNLJqUmtPz6ZHCttsFO0VvzXRkDjKAe9+FZy64878/",
-	"PZHK20Hu46u9YSgyrEo8BZdc2ErfISxIncqHMpdPRuhXgNikS9iB22gJ0WeBnHYZjZ69sS3q2i+NlVZB",
-	"JzQ9Kuv40onM+GBSpxdCuHDkh9Y+V3aG7sSUwAqSEOnEY/ULlZ9WNMbRm9BTi1ZGVm4nP5xKbnfI8Phy",
-	"O1wJ6Kk7GB2R/vgonDz8zcBd2RihN2km18hpioQSIqTJXefwhy6MQk9ePHv2tPl+0H7tqe5zF5HkgLy4",
-	"DmbihwK6brxUv1ye1b05V4OFTn5mXKUMovKIiOcqOlJNKG/BTFmfNDxaFOgtToZ/XrqNrg4Ngw+Y3vka",
-	"soStgSODVFHG95ZYLO01a4GhJeBELtGTWn8ITRZV69JMuJ3K8CaNV2l8dcJ7orKO556ojh/vizXNt5DY",
-	"AXsip/sOFr9L33u9hdAjv+Q6ssD9MG6XApgb3VIhdJQRSiH2pZsVmdO4m1iNl0RIxtddxesfdvpj2O/1",
-	"7lwdrHg9UQyHfPNihhLq0AFFlxjTqOzENryMa9B/NRk3u35se3CfkJtdDRJuM5GFoiOICjakZMFVCM6V",
-	"7bAoUzRt3nZE/b5Z1POiIUOTbJuODf6ysp2/k6oSVAJvaKu1AsoPTLLBQBXNXnvF3E7GOwahPm+8GTje",
-	"+QT8TL93bcsEdT2ZbJYQJVhIJACorQuWIH40XUfOSNGiQQ8VTRrMO+MU91rZfqPRhV/8vcK/cM5LWe/v",
-	"pbc60VC1oUXqUpXMISr7ZmiymjYZKGI5lScj6vjB9A7pEPT/KGy+8f63iWlMMcQLW0FC2PiEFFLmHIwB",
-	"JQDLI5MA9sy1fzZ5X1DfouX7imBuu0I8srbV2Dhp+PK16RcRIqDm/zagz1miUzGLfKY2rp+S9GT+A9M6",
-	"5bD78GTBt3r/pH1ENMewfx7FNsv7YTKZdOok9K19gJU/0ukL7OpxxO2Eo3nypzz5jAxP6avKBMwFaOW8",
-	"IlKfQYzQB5jnQj311J1f3GJI/2UOG3l62ewUnKrtpqfyBSrQQ+bGP3pW8oWxgXTDhUFUj8KIDrbaJq9l",
-	"Rmp7pHVqPzgJna4M7O+7iMH+nZLvpnThqqDgII4EDQvhHW4YIauXhLkAQvQZIBMoxhKPgs1O4dG2ZdGn",
-	"G0UFAXxV0DDniW1NJKbjseogtMroqGihG7FU9dDd3Gz+bwA=",
+	"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",
+	"/zcA",
 }
 
 // decodeSpec returns the embedded OpenAPI spec as raw JSON bytes,

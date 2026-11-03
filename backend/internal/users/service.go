@@ -17,6 +17,7 @@ import (
 	"malgary/backend/internal/httpapi"
 	"malgary/backend/internal/httpapi/gen"
 	"malgary/backend/internal/identity"
+	"malgary/backend/internal/interim"
 	"malgary/backend/internal/routing"
 	"malgary/backend/internal/store"
 	"malgary/backend/internal/store/db"
@@ -33,6 +34,9 @@ type Service struct {
 	Store    *store.Store
 	Identity identity.Provider // nil in tests without sign-in
 	Seats    SeatChecker
+	Interim  *interim.Limits // nil or inactive on dedicated cells
+	// InviteAsLink returns managed-account invitations as one-time links (FR-012a).
+	InviteAsLink bool
 }
 
 // Import creates users, adds them to groups and sends invitations where needed.
@@ -96,6 +100,19 @@ func (s *Service) Import(ctx context.Context, tenantID uuid.UUID, in []gen.UserI
 				return err
 			}
 		}
+		if s.Interim.Active() && len(created) > 0 {
+			t, err := q.GetTenant(ctx, tenantID)
+			if err != nil {
+				return err
+			}
+			emails := make([]string, len(created))
+			for i, u := range created {
+				emails[i] = u.Email
+			}
+			if err := s.Interim.CheckImport(ctx, q, t.Slug, emails); err != nil {
+				return err
+			}
+		}
 		res.Created = len(created)
 		res.SeatsUsed = int(held) + len(created)
 		res.SeatsPaid = -1
@@ -122,14 +139,22 @@ func (s *Service) Import(ctx context.Context, tenantID uuid.UUID, in []gen.UserI
 	if s.Identity != nil && link.ZitadelOrgID != nil {
 		invite := slices.Contains(link.SignInMethods, "managed")
 		for _, u := range created {
-			zid, err := s.Identity.CreateUser(ctx, *link.ZitadelOrgID, identity.NewUser{Email: u.Email, DisplayName: u.DisplayName, Invite: invite})
+			cu, err := s.Identity.CreateUser(ctx, *link.ZitadelOrgID, identity.NewUser{
+				Email: u.Email, DisplayName: u.DisplayName, Invite: invite, InviteAsLink: s.InviteAsLink,
+			})
 			if err != nil {
 				slog.WarnContext(ctx, "sign-in account not created yet", "user", u.ID, "err", err)
 			}
-			if zid != "" {
-				if err := s.Store.SetTenantUserZitadelID(ctx, db.SetTenantUserZitadelIDParams{ID: u.ID, ZitadelUserID: &zid}); err != nil {
+			if cu.ID != "" {
+				if err := s.Store.SetTenantUserZitadelID(ctx, db.SetTenantUserZitadelIDParams{ID: u.ID, ZitadelUserID: &cu.ID}); err != nil {
 					return res, err
 				}
+			}
+			if cu.InviteURL != "" {
+				if res.Invites == nil {
+					res.Invites = &[]gen.InviteLink{}
+				}
+				*res.Invites = append(*res.Invites, gen.InviteLink{Email: u.Email, Url: cu.InviteURL})
 			}
 		}
 	}
