@@ -8,8 +8,8 @@
     echo "### nft"; nft list ruleset 2>/dev/null | grep -v 'counter packets' || true
     echo "### sysctl"; sysctl -a 2>/dev/null | grep -E '^net\.(ipv4\.(ip_forward|conf\.all\.)|ipv6\.conf\.all\.)' | sort
     echo "### containers"
-    docker ps --filter 'label!=com.malgary.managed' --format '{{ "{{" }}.Names{{ "}}" }} {{ "{{" }}.Status{{ "}}" }}' \
-      | sed -E 's/Up [^(]*/Up/' | sort
+    docker ps --format '{{ "{{" }}.Names{{ "}}" }} {{ "{{" }}.Status{{ "}}" }} malgary={{ "{{" }}.Label "com.malgary.managed"{{ "}}" }}' \
+      | grep -v 'malgary=true$' | sed -E 's/Up [^(]*/Up/; s/ malgary=$//' | sort
   args: {executable: /bin/bash}
   register: snap
   changed_when: false
