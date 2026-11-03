@@ -22,7 +22,7 @@
 - name: Save the snapshot locally
   ansible.builtin.copy:
     content: "{{ snap.stdout }}\n"
-    dest: "{{ playbook_dir }}/snapshots/{{ inventory_hostname }}-{{ snapshot_label }}-{{ ansible_date_time.epoch }}.txt"
+    dest: "{{ playbook_dir }}/snapshots/{{ inventory_hostname }}-{{ snapshot_label }}-{{ ansible_facts.date_time.epoch }}.txt"
     mode: "0600"
   delegate_to: localhost
   become: false
