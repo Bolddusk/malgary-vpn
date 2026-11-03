@@ -9,8 +9,6 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - uses: opentofu/setup-opentofu@v1
-        with:
-          tofu_version: 1.13.5
       - name: fmt
         run: tofu fmt -check -recursive infra
       - name: validate envs
