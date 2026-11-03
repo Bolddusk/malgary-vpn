@@ -42,3 +42,4 @@ __pycache__/
 *.pyc
 /infra/ansible/interim-facts.yml
 /infra/ansible/snapshots/
+/infra/ansible/logs/

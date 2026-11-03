@@ -9,6 +9,7 @@ services:
   zitadel:
     image: {{ zitadel_image }}
     restart: unless-stopped
+    user: "1000"   # owns ./machinekey; both services share it, as in Zitadel's own compose example
     command: start-from-init --masterkeyFile /masterkey --config /config.yaml --steps /init-steps.yaml --tlsMode external
     volumes:
       - ./masterkey:/masterkey:ro
@@ -38,6 +39,7 @@ services:
   login:
     image: {{ zitadel_login_image }}
     restart: unless-stopped
+    user: "1000"   # reads ./machinekey/login-client.pat written by zitadel
     environment:
       ZITADEL_API_URL: http://zitadel:8080
       CUSTOM_REQUEST_HEADERS: "Host:id.{{ dns_zone }}"
