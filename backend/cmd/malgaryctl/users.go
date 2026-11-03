@@ -71,6 +71,13 @@ func usersCmd(ctx context.Context, c *apiClient, args []string) error {
 	}
 	fmt.Printf("created %d, already present %d, seats used %d of %d\n",
 		res.JSON200.Created, res.JSON200.Existing, res.JSON200.SeatsUsed, res.JSON200.SeatsPaid)
+	if res.JSON200.Invites != nil && len(*res.JSON200.Invites) > 0 {
+		// FR-012a: no email yet. Each link works once and is not stored anywhere: pass it on now.
+		fmt.Println("\ninvitation links (each works once; send them to the users now):")
+		for _, inv := range *res.JSON200.Invites {
+			fmt.Printf("  %s  %s\n", inv.Email, inv.Url)
+		}
+	}
 	return nil
 }
 

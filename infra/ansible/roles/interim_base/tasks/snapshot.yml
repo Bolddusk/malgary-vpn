@@ -1,0 +1,28 @@
+---
+# Host network snapshot for the "host unchanged" check (feature 002, T037, quickstart V3).
+# Saved on the operator's machine under infra/ansible/snapshots/ (git-ignored).
+- name: Capture iptables, nftables, network sysctls and other apps' containers
+  ansible.builtin.shell: |
+    set -o pipefail
+    echo "### iptables"; iptables-save | sed -E 's/\[[0-9]+:[0-9]+\]//; /^#/d'
+    echo "### nft"; nft list ruleset 2>/dev/null | grep -v 'counter packets' || true
+    echo "### sysctl"; sysctl -a 2>/dev/null | grep -E '^net\.(ipv4\.(ip_forward|conf\.all\.)|ipv6\.conf\.all\.)' | sort
+    echo "### containers"
+    docker ps --filter 'label!=com.malgary.managed' --format '{{ "{{" }}.Names{{ "}}" }} {{ "{{" }}.Status{{ "}}" }}' \
+      | sed -E 's/Up [^(]*/Up/' | sort
+  args: {executable: /bin/bash}
+  register: snap
+  changed_when: false
+
+- name: Local snapshot directory
+  ansible.builtin.file: {path: "{{ playbook_dir }}/snapshots", state: directory, mode: "0700"}
+  delegate_to: localhost
+  become: false
+
+- name: Save the snapshot locally
+  ansible.builtin.copy:
+    content: "{{ snap.stdout }}\n"
+    dest: "{{ playbook_dir }}/snapshots/{{ inventory_hostname }}-{{ snapshot_label }}-{{ ansible_date_time.epoch }}.txt"
+    mode: "0600"
+  delegate_to: localhost
+  become: false

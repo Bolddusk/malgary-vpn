@@ -1,0 +1,24 @@
+# Test tenant on the interim host (feature 002). Malgary-managed accounts only, so it works
+# before Google sign-in is configured; users get one-time invitation links (FR-012a).
+apiVersion: malgary.io/v1
+kind: Tenant
+metadata:
+  slug: testco
+  legalName: "TestCo (interim test tenant)"
+spec:
+  cell: i01
+  identity:
+    signInMethods: [managed]
+    allowedDomains: [gmail.com]
+    mfaRequired: true
+  subscription:
+    plan: ent-testco
+    planVersion: 1
+    quantity: 5
+    paymentProvider: manual
+  gateways:
+    - pair: gw-i01
+  routing:
+    default:
+      mode: full_tunnel
+    callExclusions: []

@@ -81,7 +81,13 @@ func run() error {
 	if err != nil {
 		return err
 	}
-	verifier, err := httpapi.NewOIDCVerifier(ctx, cfg.ZitadelIssuer, os.Getenv("MALGARY_API_AUDIENCE"))
+	audience := os.Getenv("MALGARY_API_AUDIENCE")
+	if audience == "" {
+		if audience, err = ensureAPIProject(ctx, idp, res); err != nil {
+			return err
+		}
+	}
+	verifier, err := httpapi.NewOIDCVerifier(ctx, cfg.ZitadelIssuer, audience)
 	if err != nil {
 		return err
 	}
@@ -125,6 +131,17 @@ func run() error {
 			slog.WarnContext(ctx, "re-apply after isolation pass", "tenant", id, "err", err)
 		}
 	}}
+	if cfg.Deployer == "compose" {
+		probeTmp := filepath.Join(cfg.Compose.StackDir, ".probe")
+		if err := os.MkdirAll(probeTmp, 0o700); err != nil {
+			return err
+		}
+		interimSvc.Env = ten
+		interimSvc.Prober = compose.Prober{
+			Image: envOr("MALGARY_PROBE_IMAGE", "malgary/isolation-probe:local"), HostIP: cfg.Compose.HostPublicIP,
+			DBHost: cfg.Compose.StackDBHost, Network: cfg.Compose.TraefikNetwork, TmpDir: probeTmp,
+		}
+	}
 	go func() {
 		for t := time.NewTicker(time.Minute); ; {
 			limits.UpdateMetrics(ctx, st.Queries)
@@ -164,6 +181,36 @@ func run() error {
 	shutdown, cancel := context.WithTimeout(context.Background(), 20*time.Second)
 	defer cancel()
 	return srv.Shutdown(shutdown)
+}
+
+// ensureAPIProject creates the backend's project, roles and malgaryctl app in Malgary sign-in
+// on a fresh installation and remembers their IDs in the secret store. The owner named by
+// MALGARY_OWNER_EMAIL gets the owner role. Returns the API token audience.
+func ensureAPIProject(ctx context.Context, idp *identity.Zitadel, res secrets.Resolver) (string, error) {
+	read := func(name string) string {
+		b, err := res.Resolve(secrets.Ref(name))
+		if err != nil {
+			return ""
+		}
+		return strings.TrimSpace(string(b))
+	}
+	cur := identity.APIProject{ProjectID: read("api-project-id"), CLIClientID: read("cli-client-id")}
+	if cur.ProjectID != "" && cur.CLIClientID != "" {
+		return cur.ProjectID, nil
+	}
+	p, err := idp.EnsureAPIProject(ctx, cur, os.Getenv("MALGARY_OWNER_EMAIL"))
+	for name, v := range map[string]string{"api-project-id": p.ProjectID, "cli-client-id": p.CLIClientID} {
+		if v != "" {
+			if perr := res.Put(secrets.Ref(name), []byte(v)); perr != nil {
+				return "", perr
+			}
+		}
+	}
+	if err != nil {
+		return "", fmt.Errorf("API project in sign-in: %w", err)
+	}
+	slog.Info("API project ready; set MALGARY_CLIENT for malgaryctl", "projectId", p.ProjectID, "malgaryctlClientId", p.CLIClientID)
+	return p.ProjectID, nil
 }
 
 // newDeployer picks the Ansible deployer (dedicated cells) or the Compose deployer (interim

@@ -681,6 +681,23 @@ paths:
                 items: {$ref: '#/components/schemas/IsolationTest'}
         default: {$ref: '#/components/responses/Problem'}
 
+  /tenants/{tenantId}/isolation-tests:run:
+    parameters: [{$ref: '#/components/parameters/TenantId'}]
+    post:
+      operationId: runIsolationTest
+      summary: Run the isolation test now and record the result (operator, interim only, FR-009)
+      description: |
+        Starts a throwaway VPN client in the tenant's stack that tries to reach private
+        destinations through the gateway. Takes up to five minutes. A pass enables the
+        tenant's access policy for the current stack hash.
+      responses:
+        '201':
+          description: Recorded (passed or failed)
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/IsolationTest'}
+        default: {$ref: '#/components/responses/Problem'}
+
   /backups/restore-tests:
     post:
       operationId: recordRestoreTest

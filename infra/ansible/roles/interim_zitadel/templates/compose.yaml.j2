@@ -1,0 +1,67 @@
+# Managed by Ansible (role interim_zitadel). Malgary sign-in on the interim host.
+name: malgary-id
+
+x-labels: &malgary
+  com.malgary.managed: "true"
+  com.malgary.component: "sign-in"
+
+services:
+  zitadel:
+    image: {{ zitadel_image }}
+    restart: unless-stopped
+    command: start-from-init --masterkeyFile /masterkey --config /config.yaml --steps /init-steps.yaml --tlsMode external
+    volumes:
+      - ./masterkey:/masterkey:ro
+      - ./config.yaml:/config.yaml:ro
+      - ./init-steps.yaml:/init-steps.yaml:ro
+      - ./machinekey:/machinekey
+    networks: [coolify]
+    mem_limit: {{ interim_mem.zitadel }}m
+    memswap_limit: {{ interim_mem.zitadel }}m
+    healthcheck:
+      test: ["CMD", "/app/zitadel", "ready", "--config", "/config.yaml"]
+      interval: 15s
+      timeout: 5s
+      retries: 20
+      start_period: 60s
+    labels:
+      <<: *malgary
+      traefik.enable: "true"
+      traefik.docker.network: "{{ coolify_network }}"
+      traefik.http.routers.malgary-id.rule: "Host(`id.{{ dns_zone }}`)"
+      traefik.http.routers.malgary-id.entrypoints: "{{ coolify_entrypoint }}"
+      traefik.http.routers.malgary-id.tls.certresolver: "{{ coolify_certresolver }}"
+      traefik.http.routers.malgary-id.service: "malgary-id"
+      traefik.http.services.malgary-id.loadbalancer.server.port: "8080"
+      traefik.http.services.malgary-id.loadbalancer.server.scheme: "h2c"
+
+  login:
+    image: {{ zitadel_login_image }}
+    restart: unless-stopped
+    environment:
+      ZITADEL_API_URL: http://zitadel:8080
+      CUSTOM_REQUEST_HEADERS: "Host:id.{{ dns_zone }}"
+      NEXT_PUBLIC_BASE_PATH: /ui/v2/login
+      ZITADEL_SERVICE_USER_TOKEN_FILE: /machinekey/login-client.pat
+    volumes:
+      - ./machinekey:/machinekey:ro
+    networks: [coolify]
+    mem_limit: {{ interim_mem.login }}m
+    memswap_limit: {{ interim_mem.login }}m
+    depends_on:
+      zitadel: {condition: service_healthy}
+    labels:
+      <<: *malgary
+      traefik.enable: "true"
+      traefik.docker.network: "{{ coolify_network }}"
+      traefik.http.routers.malgary-id-login.rule: "Host(`id.{{ dns_zone }}`) && PathPrefix(`/ui/v2/login`)"
+      traefik.http.routers.malgary-id-login.entrypoints: "{{ coolify_entrypoint }}"
+      traefik.http.routers.malgary-id-login.tls.certresolver: "{{ coolify_certresolver }}"
+      traefik.http.routers.malgary-id-login.priority: "100"
+      traefik.http.routers.malgary-id-login.service: "malgary-id-login"
+      traefik.http.services.malgary-id-login.loadbalancer.server.port: "3000"
+
+networks:
+  coolify:
+    name: {{ coolify_network }}
+    external: true

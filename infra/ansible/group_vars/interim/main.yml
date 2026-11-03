@@ -1,0 +1,48 @@
+# Interim host settings (feature 002, research I1–I11). Values marked "fact" are confirmed by
+# interim-check.yml before anything is installed.
+dns_zone: "vpn.malgary.com"
+interim_root: /opt/malgary
+interim_secrets: "{{ interim_root }}/secrets"
+interim_host_ip: 178.104.48.140
+interim_until: "2027-02-28"
+interim_max_users: 10
+interim_test_tenants: "onedge,testco,malgary-ops"
+interim_test_domains: "gmail.com"
+interim_egress_note: "Temporary test IP; do not allowlist"
+
+# Coolify (fact): the proxy network, Traefik entrypoint and certificate resolver names.
+coolify_network: coolify
+coolify_entrypoint: https
+coolify_certresolver: letsencrypt
+
+# Shared PostgreSQL 18 (fact): the Coolify resource's container name on the coolify network.
+interim_pg_container: buxe1z5wikkaftx5meckmr4w
+
+# Gateway network (research I4).
+interim_gw_network: malgary-gw
+interim_gw_subnet: 10.250.0.0/24
+
+# Operators' source addresses allowed to open NetBird dashboards (Principle X). Empty = no
+# dashboard routes at all.
+interim_operator_allowlist: []
+
+# Images.
+zitadel_image: "ghcr.io/zitadel/zitadel:v4.20.1"
+zitadel_login_image: "ghcr.io/zitadel/zitadel-login:v4.20.1"
+interim_netbird_version: "0.82.0"
+
+# Memory limits in MB (research I11); the backend enforces the 3 GB total for tenant stacks.
+interim_mem:
+  zitadel: 768
+  login: 256
+  malgaryd: 256
+  alloy: 128
+interim_memory_budget_mb: 3072
+
+# Grafana Cloud (optional during development): set all three to enable the Alloy role.
+grafana_prometheus_url: ""
+grafana_prometheus_user: ""
+grafana_api_key_file: "{{ interim_secrets }}/grafana-api-key"
+
+# Build: archive of the committed backend and images, made on the operator's machine.
+interim_src_archive: "/tmp/malgary-src-{{ inventory_hostname }}.tar.gz"

@@ -1,0 +1,19 @@
+---
+# Grafana Alloy on the interim host (feature 002, T046), only when Grafana Cloud is configured.
+# Scrapes malgaryd and each tenant's guard (WireGuard bytes, guard health) and ships them.
+- name: Alloy directory
+  ansible.builtin.file: {path: "{{ interim_root }}/platform/alloy", state: directory, mode: "0700"}
+
+- name: Alloy configuration and compose file
+  ansible.builtin.template:
+    src: "{{ item }}.j2"
+    dest: "{{ interim_root }}/platform/alloy/{{ item }}"
+    mode: "0600"
+  loop: [config.alloy, compose.yaml]
+
+- name: Start or update Alloy
+  ansible.builtin.command:
+    cmd: docker compose -p malgary-alloy up -d --remove-orphans
+    chdir: "{{ interim_root }}/platform/alloy"
+  register: up
+  changed_when: "'Started' in up.stderr or 'Recreated' in up.stderr"

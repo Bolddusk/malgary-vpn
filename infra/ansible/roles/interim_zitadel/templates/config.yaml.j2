@@ -1,0 +1,20 @@
+# Managed by Ansible (role interim_zitadel).
+ExternalDomain: id.{{ dns_zone }}
+ExternalPort: 443
+ExternalSecure: true
+TLS:
+  Enabled: false   # TLS ends at Coolify's Traefik
+Database:
+  postgres:
+    Host: {{ interim_pg_container }}
+    Port: 5432
+    Database: malgary_zitadel
+    User:
+      Username: malgary_zitadel
+      Password: "{{ zitadel_db_password }}"
+      SSL: {Mode: disable}
+    Admin:
+      ExistingDatabase: malgary_zitadel
+      Username: malgary_zitadel
+      Password: "{{ zitadel_db_password }}"
+      SSL: {Mode: disable}

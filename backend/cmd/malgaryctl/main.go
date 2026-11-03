@@ -28,6 +28,7 @@ Usage:
   malgaryctl payment record <invoice-id> --amount 4000.00 --currency USD --reference REF [--proof FILE]
   malgaryctl gateway mark-pta-registered <pair> --date YYYY-MM-DD --ref REF
   malgaryctl stack reconcile <tenant>
+  malgaryctl isolation-test <tenant> [--history]     (interim host only)
 
 Environment:
   MALGARY_API      API base URL (default https://api.vpn.malgary.com/v1)
@@ -67,14 +68,15 @@ func run(ctx context.Context, args []string) error {
 
 // commands maps top-level nouns to handlers. Each lives in its own file.
 var commands = map[string]func(context.Context, *apiClient, []string) error{
-	"tenant":       tenantCmd,
-	"users":        usersCmd,
-	"plan":         planCmd,
-	"subscription": subscriptionCmd,
-	"invoice":      invoiceCmd,
-	"payment":      paymentCmd,
-	"gateway":      gatewayCmd,
-	"stack":        notYet("stack"),
+	"tenant":         tenantCmd,
+	"users":          usersCmd,
+	"plan":           planCmd,
+	"subscription":   subscriptionCmd,
+	"invoice":        invoiceCmd,
+	"payment":        paymentCmd,
+	"gateway":        gatewayCmd,
+	"isolation-test": isolationCmd,
+	"stack":          notYet("stack"),
 }
 
 func notYet(name string) func(context.Context, *apiClient, []string) error {

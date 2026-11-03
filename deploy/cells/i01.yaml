@@ -1,0 +1,12 @@
+# Interim cell (feature 002): the shared Hetzner/Coolify server 178.104.48.140. One machine
+# plays both roles; the gateway has no standby and its egress IP is temporary, never
+# PTA-registered (constitution, Interim Hosting Exception). Exit by 2027-02-28.
+code: i01
+region: nbg1
+maxUsers: 10
+interim: true
+hosts:
+  - {name: ctl.i01, role: control, size: shared, maxUsers: 10}
+  - {name: gw.i01, role: gateway, size: shared}
+gatewayPairs:
+  - {name: gw-i01, egressIp: 178.104.48.140, primary: gw.i01}

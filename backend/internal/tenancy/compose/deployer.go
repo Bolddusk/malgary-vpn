@@ -245,7 +245,8 @@ func unchanged(dir string, files map[string]File) bool {
 // writeFiles keeps a .prev copy of each existing file, then writes the new ones. It reports
 // whether a previous compose.yaml existed (so a rollback is possible).
 func writeFiles(dir string, files map[string]File) (bool, error) {
-	if err := os.MkdirAll(filepath.Join(dir, "setup"), 0o750); err != nil {
+	// 0755: nginx in the setup container runs as its own user and must read the page.
+	if err := os.MkdirAll(filepath.Join(dir, "setup"), 0o755); err != nil { //nolint:gosec // public setup page
 		return false, err
 	}
 	_, statErr := os.Stat(filepath.Join(dir, "compose.yaml"))

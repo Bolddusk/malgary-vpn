@@ -1,0 +1,112 @@
+---
+# Base for the interim host (feature 002, T029): directories, generated secrets, the isolated
+# gateway network and the platform databases. Changes nothing outside /opt/malgary, Docker
+# objects labelled com.malgary.managed, and databases owned by malgary_provisioner (FR-003).
+- name: Snapshot the host's network configuration before changes (V3)
+  ansible.builtin.include_tasks: snapshot.yml
+  vars: {snapshot_label: before}
+
+- name: Malgary directories
+  ansible.builtin.file:
+    path: "{{ item.path }}"
+    state: directory
+    owner: "{{ item.owner | default('65532') }}"
+    group: "{{ item.group | default('65532') }}"
+    mode: "{{ item.mode }}"
+  loop:
+    - {path: "{{ interim_root }}", owner: root, group: root, mode: "0755"}
+    - {path: "{{ interim_root }}/stacks", mode: "0755"}
+    - {path: "{{ interim_root }}/specs", mode: "0750"}
+    - {path: "{{ interim_root }}/cells", owner: root, group: root, mode: "0755"}
+    - {path: "{{ interim_secrets }}", mode: "0700"}
+    - {path: "{{ interim_root }}/platform", owner: root, group: root, mode: "0700"}
+
+- name: The provisioner password exists (created by the owner, 2026-11-04)
+  ansible.builtin.stat: {path: "{{ interim_secrets }}/provisioner-password"}
+  register: prov_pw
+  failed_when: not prov_pw.stat.exists
+
+- name: Generated platform secrets (created once on the host, never leave it)
+  ansible.builtin.shell: |
+    set -o pipefail
+    f={{ interim_secrets }}/{{ item.name }}
+    if [ -s "$f" ]; then echo exists; exit 0; fi
+    umask 077
+    head -c 256 /dev/urandom | tr -dc 'A-Za-z0-9' | head -c {{ item.length }} > "$f"
+    echo created
+  args: {executable: /bin/bash}
+  loop:
+    - {name: zitadel-masterkey, length: 32}
+    - {name: zitadel-db-password, length: 32}
+    - {name: zitadel-first-admin-password, length: 24}
+    - {name: malgary-owner-db-password, length: 32}
+    - {name: malgary-app-db-password, length: 32}
+    - {name: zitadel-claims-signing-key, length: 48}
+  register: gen
+  changed_when: "'created' in gen.stdout"
+  loop_control: {label: "{{ item.name }}"}
+
+- name: Secrets belong to malgaryd's user (65532) and are private
+  ansible.builtin.file:
+    path: "{{ interim_secrets }}"
+    owner: "65532"
+    group: "65532"
+    mode: u=rwX,go=
+    recurse: true
+
+- name: Gateway network (isolated bridge, no inter-container traffic, research I4)
+  ansible.builtin.shell: |
+    if docker network inspect {{ interim_gw_network }} >/dev/null 2>&1; then echo exists; exit 0; fi
+    docker network create --driver bridge --subnet {{ interim_gw_subnet }} \
+      --opt com.docker.network.bridge.enable_icc=false \
+      --opt com.docker.network.bridge.name=br-malgary-gw \
+      --label com.malgary.managed=true {{ interim_gw_network }}
+    echo created
+  register: gwnet
+  changed_when: "'created' in gwnet.stdout"
+
+- name: Platform roles and databases, created by the provisioner login (research I3)
+  ansible.builtin.shell: |
+    set -o pipefail
+    export PGPASSWORD="$(cat {{ interim_secrets }}/provisioner-password)"
+    owner_pw="$(cat {{ interim_secrets }}/malgary-owner-db-password)"
+    app_pw="$(cat {{ interim_secrets }}/malgary-app-db-password)"
+    z_pw="$(cat {{ interim_secrets }}/zitadel-db-password)"
+    docker exec -i -e PGPASSWORD {{ interim_pg_container }} \
+      psql -h 127.0.0.1 -U malgary_provisioner -d postgres -v ON_ERROR_STOP=1 -At \
+      -v owner_pw="$owner_pw" -v app_pw="$app_pw" -v z_pw="$z_pw" <<'SQL'
+    SELECT format('CREATE ROLE %I LOGIN PASSWORD %L', r, p)
+      FROM (VALUES ('malgary_owner', :'owner_pw'), ('malgary_app', :'app_pw'), ('malgary_zitadel', :'z_pw')) v(r, p)
+     WHERE NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = r) \gexec
+    SELECT format('ALTER ROLE %I LOGIN PASSWORD %L', r, p)
+      FROM (VALUES ('malgary_owner', :'owner_pw'), ('malgary_app', :'app_pw'), ('malgary_zitadel', :'z_pw')) v(r, p) \gexec
+    GRANT malgary_owner, malgary_app, malgary_zitadel TO current_user;
+    SELECT format('CREATE DATABASE %I OWNER %I', d, o)
+      FROM (VALUES ('malgary', 'malgary_owner'), ('malgary_zitadel', 'malgary_zitadel')) v(d, o)
+     WHERE NOT EXISTS (SELECT 1 FROM pg_database WHERE datname = d) \gexec
+    REVOKE ALL ON DATABASE malgary FROM PUBLIC;
+    REVOKE ALL ON DATABASE malgary_zitadel FROM PUBLIC;
+    GRANT CONNECT ON DATABASE malgary TO malgary_app;
+    SELECT 'ok';
+    SQL
+  args: {executable: /bin/bash}
+  register: dbs
+  changed_when: "'CREATE' in dbs.stdout"
+  no_log: true
+
+- name: Extension citext in the backend database (trusted extension, created by its owner)
+  ansible.builtin.shell: |
+    set -o pipefail
+    export PGPASSWORD="$(cat {{ interim_secrets }}/malgary-owner-db-password)"
+    docker exec -e PGPASSWORD {{ interim_pg_container }} \
+      psql -h 127.0.0.1 -U malgary_owner -d malgary -v ON_ERROR_STOP=1 -c 'CREATE EXTENSION IF NOT EXISTS citext'
+  args: {executable: /bin/bash}
+  register: citext
+  changed_when: "'NOTICE' not in citext.stderr"
+  no_log: true
+
+- name: Cell inventory for the interim host
+  ansible.builtin.copy:
+    src: "{{ playbook_dir }}/../../deploy/cells/i01.yaml"
+    dest: "{{ interim_root }}/cells/i01.yaml"
+    mode: "0644"

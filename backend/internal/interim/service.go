@@ -3,9 +3,11 @@ package interim
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"log/slog"
 	"net/http"
 	"net/netip"
+	"sync"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
@@ -15,12 +17,27 @@ import (
 	"malgary/backend/internal/httpapi/gen"
 	"malgary/backend/internal/store"
 	"malgary/backend/internal/store/db"
+	"malgary/backend/internal/tenancy"
+	"malgary/backend/internal/tenancy/compose"
 )
+
+// ProbeEnv prepares and removes the probe's access to a tenant's stack (internal/tenancy).
+type ProbeEnv interface {
+	PrepareIsolationProbe(ctx context.Context, tenantID uuid.UUID) (tenancy.ProbeTarget, error)
+	CleanupIsolationProbe(ctx context.Context, tenantID uuid.UUID) error
+}
+
+// ProbeRunner runs the probe client (internal/tenancy/compose).
+type ProbeRunner interface {
+	Run(ctx context.Context, slug, managementURL, setupKey string) (compose.ProbeResult, error)
+}
 
 // Service implements httpapi.InterimService: status, isolation results and restore tests.
 type Service struct {
 	*Limits
-	Store *store.Store
+	Store  *store.Store
+	Env    ProbeEnv
+	Prober ProbeRunner
 	// OnIsolationPassed re-applies the tenant so its access policy is enabled (FR-009).
 	OnIsolationPassed func(ctx context.Context, tenantID uuid.UUID)
 }
@@ -88,6 +105,45 @@ func (s *Service) RecordIsolationTest(ctx context.Context, tenantID uuid.UUID, i
 	}
 	return isolationView(row), nil
 }
+
+// RunIsolationTest prepares the probe, runs it, records the result and cleans up. Only one
+// test runs at a time on the host (the probe network is fixed).
+func (s *Service) RunIsolationTest(ctx context.Context, tenantID uuid.UUID, ranBy string) (gen.IsolationTest, error) {
+	if s.Env == nil || s.Prober == nil {
+		return gen.IsolationTest{}, httpapi.Errf(http.StatusNotImplemented, gen.Internal, "isolation probe not configured on this host")
+	}
+	if !runLock.TryLock() {
+		return gen.IsolationTest{}, httpapi.Errf(http.StatusConflict, gen.InvalidRequest, "another isolation test is running")
+	}
+	defer runLock.Unlock()
+	t, err := s.Store.GetTenant(ctx, tenantID)
+	if store.IsNotFound(err) {
+		return gen.IsolationTest{}, httpapi.ErrNotFound
+	}
+	if err != nil {
+		return gen.IsolationTest{}, err
+	}
+	target, err := s.Env.PrepareIsolationProbe(ctx, tenantID)
+	defer func() {
+		if cerr := s.Env.CleanupIsolationProbe(context.WithoutCancel(ctx), tenantID); cerr != nil {
+			slog.WarnContext(ctx, "isolation probe cleanup", "tenant", t.Slug, "err", cerr)
+		}
+	}()
+	if err != nil {
+		return gen.IsolationTest{}, fmt.Errorf("prepare isolation probe: %w", err)
+	}
+	res, err := s.Prober.Run(ctx, t.Slug, target.ManagementURL, target.SetupKey)
+	if err != nil && len(res.Results) == 0 {
+		return gen.IsolationTest{}, err
+	}
+	in := gen.IsolationTestInput{Passed: res.Passed && err == nil, Results: res.Results}
+	if res.EgressIP != "" {
+		in.EgressIp = &res.EgressIP
+	}
+	return s.RecordIsolationTest(ctx, tenantID, in, ranBy)
+}
+
+var runLock sync.Mutex
 
 // ListIsolationTests returns the newest 100 results.
 func (s *Service) ListIsolationTests(ctx context.Context, tenantID uuid.UUID) ([]gen.IsolationTest, error) {

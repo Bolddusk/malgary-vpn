@@ -1715,6 +1715,15 @@ type ClientInterface interface {
 	// Corresponds with POST /tenants/{tenantId}/isolation-tests (the `RecordIsolationTest` operationId).
 	RecordIsolationTest(ctx context.Context, tenantId TenantId, params *RecordIsolationTestParams, body RecordIsolationTestJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
 
+	// RunIsolationTest Run the isolation test now and record the result (operator, interim only, FR-009)
+	//
+	// Starts a throwaway VPN client in the tenant's stack that tries to reach private
+	// destinations through the gateway. Takes up to five minutes. A pass enables the
+	// tenant's access policy for the current stack hash.
+	//
+	// Corresponds with POST /tenants/{tenantId}/isolation-tests:run (the `RunIsolationTest` operationId).
+	RunIsolationTest(ctx context.Context, tenantId TenantId, reqEditors ...RequestEditorFn) (*http.Response, error)
+
 	// GetPostureRules Posture rules (FR-018)
 	//
 	// Corresponds with GET /tenants/{tenantId}/posture-rules (the `GetPostureRules` operationId).
@@ -2485,6 +2494,25 @@ func (c *Client) RecordIsolationTestWithBody(ctx context.Context, tenantId Tenan
 // Corresponds with POST /tenants/{tenantId}/isolation-tests (the `RecordIsolationTest` operationId).
 func (c *Client) RecordIsolationTest(ctx context.Context, tenantId TenantId, params *RecordIsolationTestParams, body RecordIsolationTestJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
 	req, err := NewRecordIsolationTestRequest(c.Server, tenantId, params, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// RunIsolationTest Run the isolation test now and record the result (operator, interim only, FR-009)
+//
+// Starts a throwaway VPN client in the tenant's stack that tries to reach private
+// destinations through the gateway. Takes up to five minutes. A pass enables the
+// tenant's access policy for the current stack hash.
+//
+// Corresponds with POST /tenants/{tenantId}/isolation-tests:run (the `RunIsolationTest` operationId).
+func (c *Client) RunIsolationTest(ctx context.Context, tenantId TenantId, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewRunIsolationTestRequest(c.Server, tenantId)
 	if err != nil {
 		return nil, err
 	}
@@ -4172,6 +4200,40 @@ func NewRecordIsolationTestRequestWithBody(server string, tenantId TenantId, par
 	return req, nil
 }
 
+// NewRunIsolationTestRequest constructs an http.Request for the RunIsolationTest method
+func NewRunIsolationTestRequest(server string, tenantId TenantId) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithOptions("simple", false, "tenantId", tenantId, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: "uuid"})
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/tenants/%s/isolation-tests:run", pathParam0)
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest(http.MethodPost, queryURL.String(), nil)
+	if err != nil {
+		return nil, err
+	}
+
+	return req, nil
+}
+
 // NewGetPostureRulesRequest constructs an http.Request for the GetPostureRules method
 func NewGetPostureRulesRequest(server string, tenantId TenantId) (*http.Request, error) {
 	var err error
@@ -5391,6 +5453,17 @@ type ClientWithResponsesInterface interface {
 	//
 	// Corresponds with POST /tenants/{tenantId}/isolation-tests (the `RecordIsolationTest` operationId).
 	RecordIsolationTestWithResponse(ctx context.Context, tenantId TenantId, params *RecordIsolationTestParams, body RecordIsolationTestJSONRequestBody, reqEditors ...RequestEditorFn) (*RecordIsolationTestResponse, error)
+
+	// RunIsolationTestWithResponse Run the isolation test now and record the result (operator, interim only, FR-009)
+	//
+	// Starts a throwaway VPN client in the tenant's stack that tries to reach private
+	// destinations through the gateway. Takes up to five minutes. A pass enables the
+	// tenant's access policy for the current stack hash.
+	//
+	// Returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with POST /tenants/{tenantId}/isolation-tests:run (the `RunIsolationTest` operationId).
+	RunIsolationTestWithResponse(ctx context.Context, tenantId TenantId, reqEditors ...RequestEditorFn) (*RunIsolationTestResponse, error)
 
 	// GetPostureRulesWithResponse Posture rules (FR-018)
 	//
@@ -6802,6 +6875,54 @@ func (r RecordIsolationTestResponse) ContentType() string {
 	return ""
 }
 
+type RunIsolationTestResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	// JSON201 the response for an HTTP 201 `application/json` response
+	JSON201 *IsolationTest
+	// ApplicationproblemJSONDefault the response for an HTTP default `application/problem+json` response
+	ApplicationproblemJSONDefault *Problem
+}
+
+// GetJSON201 returns the response for an HTTP 201 `application/json` response
+func (r RunIsolationTestResponse) GetJSON201() *IsolationTest {
+	return r.JSON201
+}
+
+// GetApplicationproblemJSONDefault returns the response for an HTTP default `application/problem+json` response
+func (r RunIsolationTestResponse) GetApplicationproblemJSONDefault() *Problem {
+	return r.ApplicationproblemJSONDefault
+}
+
+// GetBody returns the raw response body bytes
+func (r RunIsolationTestResponse) GetBody() []byte {
+	return r.Body
+}
+
+// Status returns HTTPResponse.Status
+func (r RunIsolationTestResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r RunIsolationTestResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+// ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
+func (r RunIsolationTestResponse) ContentType() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Header.Get("Content-Type")
+	}
+	return ""
+}
+
 type GetPostureRulesResponse struct {
 	Body         []byte
 	HTTPResponse *http.Response
@@ -8095,6 +8216,23 @@ func (c *ClientWithResponses) RecordIsolationTestWithResponse(ctx context.Contex
 	return ParseRecordIsolationTestResponse(rsp)
 }
 
+// RunIsolationTestWithResponse Run the isolation test now and record the result (operator, interim only, FR-009)
+//
+// Starts a throwaway VPN client in the tenant's stack that tries to reach private
+// destinations through the gateway. Takes up to five minutes. A pass enables the
+// tenant's access policy for the current stack hash.
+//
+// Returns a wrapper object for the known response body format(s).
+//
+// Corresponds with POST /tenants/{tenantId}/isolation-tests:run (the `RunIsolationTest` operationId).
+func (c *ClientWithResponses) RunIsolationTestWithResponse(ctx context.Context, tenantId TenantId, reqEditors ...RequestEditorFn) (*RunIsolationTestResponse, error) {
+	rsp, err := c.RunIsolationTest(ctx, tenantId, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseRunIsolationTestResponse(rsp)
+}
+
 // GetPostureRulesWithResponse Posture rules (FR-018)
 //
 // Returns a wrapper object for the known response body format(s).
@@ -9258,6 +9396,39 @@ func ParseRecordIsolationTestResponse(rsp *http.Response) (*RecordIsolationTestR
 	}
 
 	response := &RecordIsolationTestResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 201:
+		var dest IsolationTest
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON201 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && true:
+		var dest Problem
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.ApplicationproblemJSONDefault = &dest
+
+	}
+
+	return response, nil
+}
+
+// ParseRunIsolationTestResponse parses an HTTP response from a RunIsolationTestWithResponse call
+func ParseRunIsolationTestResponse(rsp *http.Response) (*RunIsolationTestResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &RunIsolationTestResponse{
 		Body:         bodyBytes,
 		HTTPResponse: rsp,
 	}

@@ -1,0 +1,105 @@
+---
+# Read-only facts from the interim host (feature 002, T028). Changes nothing; writes
+# interim-facts.yml next to this playbook. Stop and update research.md if a fact differs.
+- name: Interim host facts
+  hosts: interim
+  gather_facts: true
+  tasks:
+    - name: Coolify proxy compose file
+      ansible.builtin.slurp: {src: /data/coolify/proxy/docker-compose.yml}
+      register: proxy_compose
+
+    - name: Docker networks
+      ansible.builtin.command: docker network ls --format '{{ "{{" }}.Name{{ "}}" }}'
+      register: networks
+      changed_when: false
+
+    - name: Shared PostgreSQL container
+      ansible.builtin.command: >-
+        docker inspect --format '{{ "{{" }}.Config.Image{{ "}}" }} {{ "{{" }}.State.Status{{ "}}" }}' {{ interim_pg_container }}
+      register: pg
+      changed_when: false
+
+    - name: Provisioner login works over TCP and has only CREATEDB and CREATEROLE
+      ansible.builtin.shell: |
+        set -o pipefail
+        docker exec -e PGPASSWORD="$(cat {{ interim_secrets }}/provisioner-password)" {{ interim_pg_container }} \
+          psql -h 127.0.0.1 -U malgary_provisioner -d postgres -At -c \
+          "select rolsuper, rolcreatedb, rolcreaterole, current_setting('server_version_num')::int >= 160000,
+                  exists (select 1 from pg_available_extensions where name = 'citext')
+           from pg_roles where rolname = current_user"
+      args: {executable: /bin/bash}
+      register: prov
+      changed_when: false
+      no_log: false
+
+    - name: UDP ports in use
+      ansible.builtin.command: ss -Hlun
+      register: udp
+      changed_when: false
+
+    - name: WireGuard kernel module
+      ansible.builtin.shell: |
+        set -o pipefail
+        if lsmod | grep -q '^wireguard'; then echo loaded
+        elif modinfo wireguard >/dev/null 2>&1; then echo available
+        else echo missing; fi
+      args: {executable: /bin/bash}
+      register: wg
+      changed_when: false
+      failed_when: false
+
+    - name: Malgary objects already present
+      ansible.builtin.command: docker ps -a --filter label=com.malgary.managed=true --format '{{ "{{" }}.Names{{ "}}" }}'
+      register: existing
+      changed_when: false
+
+    - name: Summarise
+      vars:
+        proxy: "{{ proxy_compose.content | b64decode }}"
+        busy_udp: "{{ udp.stdout_lines | map('split') | map('extract', 3) | map('regex_replace', '^.*:', '') | map('int') | list }}"
+        wanted_udp: "{{ range(3478, 3481) | list + range(51821, 51831) | list }}"
+        prov_cols: "{{ prov.stdout.split('|') }}"
+      ansible.builtin.set_fact:
+        interim_facts:
+          checked_at: "{{ ansible_date_time.iso8601 }}"
+          memory_available_mb: "{{ ansible_memory_mb.nocache.free }}"
+          swap_used_mb: "{{ ansible_memory_mb.swap.used }}"
+          kernel: "{{ ansible_kernel }}"
+          coolify_network_present: "{{ coolify_network in networks.stdout_lines }}"
+          gw_network_present: "{{ interim_gw_network in networks.stdout_lines }}"
+          proxy_entrypoints: "{{ proxy | regex_findall('entrypoints\\.([a-z0-9-]+)\\.address') | unique }}"
+          proxy_certresolvers: "{{ proxy | regex_findall('certificatesresolvers\\.([a-z0-9-]+)\\.') | unique }}"
+          proxy_docker_provider: "{{ 'providers.docker' in proxy }}"
+          postgres: "{{ pg.stdout }}"
+          provisioner_superuser: "{{ prov_cols[0] == 't' }}"
+          provisioner_createdb: "{{ prov_cols[1] == 't' }}"
+          provisioner_createrole: "{{ prov_cols[2] == 't' }}"
+          postgres_16_or_later: "{{ prov_cols[3] == 't' }}"
+          citext_available: "{{ prov_cols[4] == 't' }}"
+          udp_ports_taken: "{{ wanted_udp | intersect(busy_udp) }}"
+          wireguard: "{{ wg.stdout | trim }}"
+          malgary_containers: "{{ existing.stdout_lines }}"
+
+    - name: Write interim-facts.yml locally
+      ansible.builtin.copy:
+        content: "{{ interim_facts | to_nice_yaml }}"
+        dest: "{{ playbook_dir }}/interim-facts.yml"
+        mode: "0644"
+      delegate_to: localhost
+      become: false
+
+    - name: Show facts
+      ansible.builtin.debug: {var: interim_facts}
+
+    - name: Facts match the research
+      ansible.builtin.assert:
+        that:
+          - interim_facts.coolify_network_present
+          - coolify_entrypoint in interim_facts.proxy_entrypoints
+          - coolify_certresolver in interim_facts.proxy_certresolvers
+          - not interim_facts.provisioner_superuser
+          - interim_facts.provisioner_createdb and interim_facts.provisioner_createrole
+          - interim_facts.postgres_16_or_later
+          - interim_facts.udp_ports_taken | length == 0
+        fail_msg: "A fact differs from research.md; stop and review before installing."

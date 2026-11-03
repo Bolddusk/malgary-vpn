@@ -16,6 +16,7 @@ type InterimService interface {
 	Status(ctx context.Context) (gen.InterimStatus, error)
 	RecordIsolationTest(ctx context.Context, tenantID uuid.UUID, in gen.IsolationTestInput, ranBy string) (gen.IsolationTest, error)
 	ListIsolationTests(ctx context.Context, tenantID uuid.UUID) ([]gen.IsolationTest, error)
+	RunIsolationTest(ctx context.Context, tenantID uuid.UUID, ranBy string) (gen.IsolationTest, error)
 	RecordRestoreTest(ctx context.Context, in gen.RestoreTestInput) error
 }
 
@@ -43,6 +44,16 @@ func (h *Handlers) RecordIsolationTest(w http.ResponseWriter, r *http.Request, t
 		return
 	}
 	res, err := h.Interim.RecordIsolationTest(r.Context(), tenantID, in, PrincipalFrom(r.Context()).Subject)
+	respond(w, r, http.StatusCreated, res, err)
+}
+
+// RunIsolationTest runs the probe now and records the result (operator, FR-009).
+func (h *Handlers) RunIsolationTest(w http.ResponseWriter, r *http.Request, tenantID gen.TenantId) {
+	if err := Require(r.Context(), OwnersOperators...); err != nil || !h.interimOn() {
+		WriteError(w, r, ErrNotFound)
+		return
+	}
+	res, err := h.Interim.RunIsolationTest(r.Context(), tenantID, PrincipalFrom(r.Context()).Subject)
 	respond(w, r, http.StatusCreated, res, err)
 }
 

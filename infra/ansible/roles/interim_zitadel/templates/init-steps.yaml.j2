@@ -1,0 +1,30 @@
+# First instance: Malgary admin organization. Owners and operators MUST use MFA (FR-029).
+FirstInstance:
+  MachineKeyPath: /machinekey/malgary-backend.json
+  LoginClientPatPath: /machinekey/login-client.pat
+  Org:
+    Name: Malgary
+    Human:
+      UserName: {{ interim_owner_email }}
+      FirstName: Malgary
+      LastName: Owner
+      Email:
+        Address: {{ interim_owner_email }}
+        Verified: true
+      Password: "{{ zitadel_first_admin_password }}"
+      PasswordChangeRequired: true
+    Machine:
+      Machine:
+        Username: malgary-backend
+        Name: Malgary backend
+      MachineKey:
+        Type: 1
+    LoginClient:
+      Machine:
+        Username: login-client
+        Name: Malgary login client
+      Pat:
+        ExpirationDate: "2099-01-01T00:00:00Z"
+  LoginPolicy:
+    ForceMFA: true
+    ForceMFALocalOnly: false

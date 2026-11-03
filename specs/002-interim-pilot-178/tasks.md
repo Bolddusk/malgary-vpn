@@ -149,45 +149,45 @@ and a test user connects from the setup page.
 - [X] T022 [US1] Select the deployer from `MALGARY_DEPLOYER` in
   `backend/cmd/malgaryd/main.go`; set `StackSpec.Database.Host` from `MALGARY_STACK_DB_HOST`
   when compose is used.
-- [ ] T023 [US1] Invitation links (FR-012a) in `backend/internal/identity/users.go`: when
+- [X] T023 [US1] Invitation links (FR-012a) in `backend/internal/identity/users.go`: when
   `InviteDelivery=link`, call `CreateInviteCode` with `ReturnCode` and build the URL
   `https://id.<base>/ui/v2/login/verify?userId=…&code=…&invite=true` (confirm the path against
   Zitadel v4.20's login app); return it from `CreateUser`; pass it through
   `backend/internal/users/service.go` to the import response; never store or log it.
-- [ ] T024 [US1] Print invitation links in `backend/cmd/malgaryctl/users.go` after import
+- [X] T024 [US1] Print invitation links in `backend/cmd/malgaryctl/users.go` after import
   (one line per user), with a note that each link works once.
-- [ ] T025 [US1] Dockerfile `backend/Dockerfile`: multi-stage build (`golang:1.27` →
+- [X] T025 [US1] Dockerfile `backend/Dockerfile`: multi-stage build (`golang:1.27` →
   `gcr.io/distroless/static-debian12:nonroot`) with the `docker` CLI and compose plugin binaries
   copied in for the ComposeDeployer; `malgaryd` and `malgaryctl` in `/usr/local/bin`.
-- [ ] T026 [P] [US1] Cell inventory for the interim host `deploy/cells/i01.yaml`: cell `i01`,
+- [X] T026 [P] [US1] Cell inventory for the interim host `deploy/cells/i01.yaml`: cell `i01`,
   `interim: true`, `maxUsers: 10`, one host `h178` with roles control and gateway, one gateway
   "pair" with egress IP 178.104.48.140 and no standby. Add `i\d\d` to the reserved tenant slugs.
-- [ ] T027 [US1] Ansible inventory `infra/ansible/inventory/interim.yml` (178 only) and
+- [X] T027 [US1] Ansible inventory `infra/ansible/inventory/interim.yml` (178 only) and
   `group_vars` for interim (`infra/ansible/group_vars/interim.yml`): proxy entrypoint and
   resolver names, Postgres container name, memory limits, operator allowlist.
-- [ ] T028 [US1] Read-only facts playbook `infra/ansible/interim-check.yml`: reads the Coolify
+- [X] T028 [US1] Read-only facts playbook `infra/ansible/interim-check.yml`: reads the Coolify
   proxy compose for entrypoint and certresolver names, lists Docker networks, checks the
   Postgres container name and version, `citext` availability, free memory, UDP ports 3478–3480
   and 51821–51830 free, and writes `interim-facts.yml` locally. No changes (`check_mode`
   safe, every task `changed_when: false`).
-- [ ] T029 [US1] Role `infra/ansible/roles/interim_base/`: `/opt/malgary/{stacks,specs,secrets}`
+- [X] T029 [US1] Role `infra/ansible/roles/interim_base/`: `/opt/malgary/{stacks,specs,secrets}`
   (0750, secrets 0700), Docker network `malgary-gw` (bridge, `10.250.0.0/24`,
   `com.docker.network.bridge.enable_icc=false`), and a check that the `malgary_provisioner` login
   (created by the owner, 2026-11-04) connects over TCP with the password in
   `/opt/malgary/secrets/provisioner-password` (0600). Malgary never needs the superuser
   password.
-- [ ] T030 [US1] Role `infra/ansible/roles/interim_zitadel/`: compose project `malgary-id` with
+- [X] T030 [US1] Role `infra/ansible/roles/interim_zitadel/`: compose project `malgary-id` with
   Zitadel v4.20 and the login app on the `coolify` network, Traefik labels for
   `id.vpn.malgary.com`, memory 768 MB + 256 MB, database `zitadel` created by the provisioner,
   no SMTP (email deferred), first-instance machine key written to
   `/opt/malgary/secrets/zitadel-machine-key.json` (0600).
-- [ ] T031 [US1] Role `infra/ansible/roles/interim_backend/`: build the malgaryd image on the
+- [X] T031 [US1] Role `infra/ansible/roles/interim_backend/`: build the malgaryd image on the
   host from the repository checkout (or a pushed release), compose project `malgary-api` on the
   `coolify` network with Traefik labels for `api.vpn.malgary.com`, 256 MB limit, mounts for the
   Docker socket and `/opt/malgary/*`, env file (0600) with the interim settings from
   [data-model.md](data-model.md) (`MALGARY_INVITE_DELIVERY=link`,
   `MALGARY_INTERIM_TEST_DOMAINS=gmail.com`), databases `malgary` with owner and app roles.
-- [ ] T032 [US1] Playbook `infra/ansible/interim-site.yml` running `interim_base`,
+- [X] T032 [US1] Playbook `infra/ansible/interim-site.yml` running `interim_base`,
   `interim_zitadel`, `interim_backend` and, only when Grafana credentials are set,
   `interim_alloy` (T046). Writes a firewall snapshot before and after (T037).
 - [ ] T033 🖥 [US1] Run `interim-check.yml` on 178 and update [research.md](research.md) with any
@@ -211,15 +211,15 @@ remove Malgary.
   limits of all rendered stacks plus the platform's fixed 1,408 MB (Zitadel, login, malgaryd,
   Alloy) and refuse a deploy that would exceed `MALGARY_MEMORY_BUDGET_MB` (default 3072); test
   in `budget_test.go` (FR-005, SC-004).
-- [ ] T036 [P] [US2] Labels on every Malgary container and network: `com.malgary.managed=true`
+- [X] T036 [P] [US2] Labels on every Malgary container and network: `com.malgary.managed=true`
   and `com.malgary.tenant=<slug>`, in the compose templates and the interim roles, so checks
   and removal find exactly Malgary's objects.
-- [ ] T037 [US2] Host snapshot tasks `infra/ansible/roles/interim_base/tasks/snapshot.yml`:
+- [X] T037 [US2] Host snapshot tasks `infra/ansible/roles/interim_base/tasks/snapshot.yml`:
   `iptables-save`, `nft list ruleset`, `sysctl -a` for net keys, and `docker ps` of non-Malgary
   containers, saved to the operator's machine with a timestamp; `infra/tools/interim-diff.sh`
   compares two snapshots and fails on any change other than Docker's DNAT/ACCEPT rules for
   Malgary's published ports (FR-003, V3).
-- [ ] T038 [P] [US2] Script `infra/tools/interim-memory.sh`: `docker stats --no-stream` filtered
+- [X] T038 [P] [US2] Script `infra/tools/interim-memory.sh`: `docker stats --no-stream` filtered
   by `com.malgary.managed=true`, prints each container against its limit and the total against
   3 GB, exits non-zero when over (V4).
 - [ ] T039 🖥 [US2] Run the snapshot diff and memory check after T034; confirm in Coolify that
@@ -259,17 +259,17 @@ access.
   `backend/internal/tenancy/apply.go` (or `rules.go`), when interim is on, set
   `malgary:access:*` policies `enabled=false` unless the latest `isolation_test_result` for the
   stack's current hash passed; recording a pass triggers a re-apply (FR-009).
-- [ ] T044 [US3] Probe image `infra/images/isolation-probe/`: NetBird client plus a probe script
+- [X] T044 [US3] Probe image `infra/images/isolation-probe/`: NetBird client plus a probe script
   that tries TCP 22/80/443/5432 on the host IP, `10.0.0.1`, `10.250.0.1`, `172.17.0.1`, the
   Postgres container IP (argument), `192.168.0.1`, `169.254.169.254`, then
   `https://1.1.1.1` and an egress-IP lookup; prints a JSON result matching the
   `results` shape in [data-model.md](data-model.md).
-- [ ] T045 [US3] `malgaryctl isolation-test <tenant>` in `backend/cmd/malgaryctl/isolation.go`:
+- [X] T045 [US3] `malgaryctl isolation-test <tenant>` in `backend/cmd/malgaryctl/isolation.go`:
   creates a single-use ephemeral setup key in group `isolation-test` (which gets the full-tunnel
   route), runs the probe container on its own throwaway bridge network, posts the result to
   `POST /v1/tenants/{id}/isolation-tests`, removes the container, network and peer, and exits
   non-zero naming any reachable destination.
-- [ ] T046 [P] [US3] Role `infra/ansible/roles/interim_alloy/` (optional, runs only when Grafana
+- [X] T046 [P] [US3] Role `infra/ansible/roles/interim_alloy/` (optional, runs only when Grafana
   Cloud credentials are set): Alloy container, 128 MB, scraping malgaryd, guards and NetBird
   metrics.
 - [ ] T047 🖥 [US3] Build the guard and probe images on 178, redeploy `testco`, run
@@ -295,15 +295,15 @@ cell `backup` role, `malgaryctl backup verify`, the 26-hour alert, and quickstar
 
 **Independent test**: quickstart V11, V12.
 
-- [ ] T048 [P] [US5] Runbook `docs/runbooks/interim-exit.md`: final database dumps, restore on
+- [X] T048 [P] [US5] Runbook `docs/runbooks/interim-exit.md`: final database dumps, restore on
   the new cell with 001's `restore.yml`, copy `/opt/malgary/{stacks,specs,secrets}`, re-point
   the three Cloudflare records, check clients reconnect, then removal (FR-016).
-- [ ] T049 [US5] Removal playbook `infra/ansible/interim-remove.yml`: `docker compose down -v`
+- [X] T049 [US5] Removal playbook `infra/ansible/interim-remove.yml`: `docker compose down -v`
   for every project labelled `com.malgary.managed=true`, remove `malgary-gw`, drop every
   database and role created by `malgary_provisioner`, then the provisioner role, then
   `/opt/malgary`; dry-run by default (`-e confirm=yes` to act), and a final check that nothing
   labelled Malgary remains (FR-017).
-- [ ] T050 [US5] `ComposeDeployer.Remove(tenant)` in
+- [X] T050 [US5] `ComposeDeployer.Remove(tenant)` in
   `backend/internal/tenancy/compose/deployer.go` per the contract's teardown section, used by
   the playbook and tenant deletion.
 - [ ] T051 🖥 [US5] Rehearse: move testco to a scratch host, reconnect an existing client,
@@ -315,12 +315,38 @@ cell `backup` role, `malgaryctl backup verify`, the 26-hour alert, and quickstar
 
 - [ ] T052 [P] Update `docs/architecture-overview.html` and `deploy/cells/README.md` with the
   interim deployment (one host, compose, guard), and add `docs/decisions/0002-interim-host.md`.
-- [ ] T053 [P] CI: build `infra/images/*` and `backend/Dockerfile` (no push) and run the guard
+- [X] T053 [P] CI: build `infra/images/*` and `backend/Dockerfile` (no push) and run the guard
   rules test in `.github/workflows/ci.yml`.
-- [ ] T054 Run `go vet`, `golangci-lint`, `go test ./...`, `ansible-lint` and `tofu validate`
+- [X] T054 Run `go vet`, `golangci-lint`, `go test ./...`, `ansible-lint` and `tofu validate`
   locally; fix findings.
 - [ ] T055 Fill in `specs/002-interim-pilot-178/quickstart.md` results after the on-server runs
   and record pass/fail per scenario.
+
+- [X] T056 Bootstrap the backend's project in Malgary sign-in on first start: "Malgary API"
+  project with roles owner, operator, tenant_admin, deployer; `malgaryctl` device-flow app (JWT
+  access tokens with roles); owner role for `MALGARY_OWNER_EMAIL`; IDs kept in the secret store
+  (`backend/internal/identity/apiproject.go`, `cmd/malgaryd/main.go`). Found missing while
+  writing the install: without it nobody can sign in to the API.
+- [X] T057 Interim tenant definitions `deploy/tenants/interim/{testco,onedge}.yaml` (cell
+  `i01`, gateway `gw-i01`, Gmail test users; testco uses managed accounts so it works before
+  Google sign-in exists).
+
+## Implementation notes
+
+- The gateway container registers with `NB_HOSTNAME` equal to the routing peer's host
+  (`gw.i01`), because the backend finds gateway peers by hostname (bug found by the
+  integration test, fixed in the template).
+- The isolation probe uses its own route (0.0.0.0/0 through the tenant's gateway) and access
+  policy, both tagged `isolation-test` and removed after the run, so it works while users are
+  still locked out and covers the worst routing rule a tenant could set. Its network uses
+  192.0.2.0/28 so no private target is directly connected. Only a silent drop counts as
+  "blocked"; a reset or answer counts as reachable, so a missing guard fails the test.
+- Results are always recorded against the stack's current hash (the client's value is
+  ignored), and access policies are created disabled until a pass exists for that hash.
+- The provisioner gives itself membership of each role it creates (PostgreSQL 16+ grants the
+  creator only ADMIN), which is what lets it create the role's database; tested on
+  PostgreSQL 18 together with the checks that it can't alter, drop or reach other apps' roles
+  and databases.
 
 ---
 

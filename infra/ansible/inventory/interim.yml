@@ -1,0 +1,10 @@
+# The interim host (feature 002): the shared Hetzner/Coolify server. Use with
+#   ansible-playbook -i inventory/interim.yml interim-check.yml
+# Nothing in this inventory is part of the dedicated cells.
+all:
+  children:
+    interim:
+      hosts:
+        h178:
+          ansible_host: 178.104.48.140
+          ansible_user: root

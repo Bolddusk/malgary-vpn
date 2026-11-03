@@ -1,0 +1,33 @@
+# Managed by Ansible (role interim_backend). malgaryd on the interim host.
+name: malgary-api
+
+services:
+  malgaryd:
+    image: malgary/malgaryd:{{ image_tag }}
+    restart: unless-stopped
+    env_file: ./malgaryd.env
+    group_add: ["{{ docker_gid }}"]
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+      # Same paths as on the host: docker resolves the stacks' bind mounts on the host.
+      - {{ interim_root }}/stacks:{{ interim_root }}/stacks
+      - {{ interim_root }}/specs:{{ interim_root }}/specs
+      - {{ interim_root }}/secrets:{{ interim_root }}/secrets
+      - {{ interim_root }}/cells:{{ interim_root }}/cells:ro
+    networks: [coolify]
+    mem_limit: {{ interim_mem.malgaryd }}m
+    memswap_limit: {{ interim_mem.malgaryd }}m
+    labels:
+      com.malgary.managed: "true"
+      com.malgary.component: "backend"
+      traefik.enable: "true"
+      traefik.docker.network: "{{ coolify_network }}"
+      traefik.http.routers.malgary-api.rule: "Host(`api.{{ dns_zone }}`) && (PathPrefix(`/v1`) || Path(`/healthz`) || PathPrefix(`/hooks/`))"
+      traefik.http.routers.malgary-api.entrypoints: "{{ coolify_entrypoint }}"
+      traefik.http.routers.malgary-api.tls.certresolver: "{{ coolify_certresolver }}"
+      traefik.http.services.malgary-api.loadbalancer.server.port: "18090"
+
+networks:
+  coolify:
+    name: {{ coolify_network }}
+    external: true

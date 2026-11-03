@@ -1,0 +1,76 @@
+---
+# Remove every trace of Malgary from the interim host (feature 002, FR-017, T049).
+# Dry run by default: it lists what it would remove. To act:
+#   ansible-playbook -i inventory/interim.yml interim-remove.yml -e confirm=yes
+# Take a final backup first (exit runbook, docs/runbooks/interim-exit.md).
+- name: Remove Malgary from the interim host
+  hosts: interim
+  gather_facts: false
+  vars:
+    acting: "{{ confirm | default('no') == 'yes' }}"
+  tasks:
+    - name: Malgary containers, networks and volumes
+      ansible.builtin.shell: |
+        echo "containers:"; docker ps -a --filter label=com.malgary.managed=true --format '  {{ "{{" }}.Names{{ "}}" }}'
+        echo "networks:"; docker network ls --filter label=com.malgary.managed=true --format '  {{ "{{" }}.Name{{ "}}" }}'
+        echo "volumes:"; docker volume ls --filter label=com.malgary.managed=true --format '  {{ "{{" }}.Name{{ "}}" }}'
+      register: inventory
+      changed_when: false
+
+    - name: Malgary databases and roles (created by malgary_provisioner)
+      ansible.builtin.shell: |
+        set -o pipefail
+        export PGPASSWORD="$(cat {{ interim_secrets }}/provisioner-password)"
+        docker exec -e PGPASSWORD {{ interim_pg_container }} psql -h 127.0.0.1 -U malgary_provisioner -d postgres -At -c \
+          "select 'database ' || datname from pg_database where datname = 'malgary' or datname like 'malgary\_%' or datname like 'nb\_%'
+           union all
+           select 'role ' || rolname from pg_roles where rolname like 'malgary\_%' and rolname <> 'malgary_provisioner' or rolname like 'nb\_%'"
+      args: {executable: /bin/bash}
+      register: dbs
+      changed_when: false
+
+    - name: What will be removed
+      ansible.builtin.debug:
+        msg: "{{ inventory.stdout_lines + dbs.stdout_lines + ['directory ' ~ interim_root] + ([] if acting else ['DRY RUN: pass -e confirm=yes to remove']) }}"
+
+    - name: Stop and remove compose projects (tenant stacks, sign-in, backend)
+      when: acting
+      ansible.builtin.shell: |
+        set -o pipefail
+        for p in $(docker ps -a --filter label=com.malgary.managed=true --format '{{ "{{" }}.Label "com.docker.compose.project"{{ "}}" }}' | sort -u); do
+          docker compose -p "$p" down -v --remove-orphans
+        done
+        docker ps -aq --filter label=com.malgary.managed=true | xargs -r docker rm -f
+        docker volume ls -q --filter label=com.malgary.managed=true | xargs -r docker volume rm
+        docker network ls -q --filter label=com.malgary.managed=true | xargs -r docker network rm
+      args: {executable: /bin/bash}
+      changed_when: true
+
+    - name: Drop databases and roles
+      when: acting
+      ansible.builtin.shell: |
+        set -o pipefail
+        export PGPASSWORD="$(cat {{ interim_secrets }}/provisioner-password)"
+        docker exec -i -e PGPASSWORD {{ interim_pg_container }} psql -h 127.0.0.1 -U malgary_provisioner -d postgres -v ON_ERROR_STOP=1 <<'SQL'
+        SELECT format('DROP DATABASE IF EXISTS %I WITH (FORCE)', datname) FROM pg_database
+         WHERE datname = 'malgary' OR datname LIKE 'malgary\_%' OR datname LIKE 'nb\_%' \gexec
+        SELECT format('DROP ROLE IF EXISTS %I', rolname) FROM pg_roles
+         WHERE (rolname LIKE 'malgary\_%' AND rolname <> 'malgary_provisioner') OR rolname LIKE 'nb\_%' \gexec
+        SQL
+      args: {executable: /bin/bash}
+      changed_when: true
+
+    - name: Remove the provisioner login (needs the superuser; printed for the owner to run)
+      ansible.builtin.debug:
+        msg: "Last step, in Coolify's PostgreSQL terminal as the superuser: DROP ROLE malgary_provisioner;"
+
+    - name: Remove {{ interim_root }}
+      when: acting
+      ansible.builtin.file: {path: "{{ interim_root }}", state: absent}
+
+    - name: Nothing labelled Malgary remains
+      when: acting
+      ansible.builtin.command: docker ps -aq --filter label=com.malgary.managed=true
+      register: left
+      changed_when: false
+      failed_when: left.stdout | length > 0

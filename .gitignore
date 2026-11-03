@@ -40,3 +40,5 @@ infra/ansible/.vault-pass*
 .claude/settings.local.json
 __pycache__/
 *.pyc
+/infra/ansible/interim-facts.yml
+/infra/ansible/snapshots/

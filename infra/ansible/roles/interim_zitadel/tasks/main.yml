@@ -1,0 +1,65 @@
+---
+# Malgary sign-in (Zitadel v4.20) on the interim host (feature 002, T030): a compose project on
+# Coolify's network, routed by its Traefik through labels, database on the shared PostgreSQL.
+# No SMTP during development (invitations are links, FR-012a).
+- name: Zitadel directory
+  ansible.builtin.file: {path: "{{ interim_root }}/platform/zitadel", state: directory, mode: "0700"}
+
+- name: Read generated secrets
+  ansible.builtin.slurp: {src: "{{ interim_secrets }}/{{ item }}"}
+  loop: [zitadel-masterkey, zitadel-db-password, zitadel-first-admin-password]
+  register: zsec
+  no_log: true
+
+- name: Secret facts
+  ansible.builtin.set_fact:
+    zitadel_masterkey: "{{ zsec.results[0].content | b64decode }}"
+    zitadel_db_password: "{{ zsec.results[1].content | b64decode }}"
+    zitadel_first_admin_password: "{{ zsec.results[2].content | b64decode }}"
+  no_log: true
+
+- name: Master key file
+  ansible.builtin.copy:
+    dest: "{{ interim_root }}/platform/zitadel/masterkey"
+    content: "{{ zitadel_masterkey }}"
+    owner: "1000"   # the Zitadel image's user
+    mode: "0600"
+  no_log: true
+
+- name: Machine key directory (written by Zitadel on first start)
+  ansible.builtin.file: {path: "{{ interim_root }}/platform/zitadel/machinekey", state: directory, mode: "0700", owner: "1000"}
+
+- name: Configuration, first-instance steps and compose file
+  ansible.builtin.template:
+    src: "{{ item }}.j2"
+    dest: "{{ interim_root }}/platform/zitadel/{{ item }}"
+    owner: "1000"
+    mode: "0600"
+  loop: [config.yaml, init-steps.yaml, compose.yaml]
+  no_log: true
+  register: zfiles
+
+- name: Start or update Zitadel
+  ansible.builtin.command:
+    cmd: docker compose -p malgary-id up -d --remove-orphans
+    chdir: "{{ interim_root }}/platform/zitadel"
+  register: zup
+  changed_when: "'Started' in zup.stderr or 'Recreated' in zup.stderr or 'Created' in zup.stderr"
+
+- name: Wait for Zitadel to answer through Traefik
+  ansible.builtin.uri:
+    url: "https://id.{{ dns_zone }}/debug/ready"
+    status_code: 200
+  register: ready
+  until: ready is succeeded
+  retries: 40
+  delay: 15
+
+- name: Machine key for the backend
+  ansible.builtin.copy:
+    remote_src: true
+    src: "{{ interim_root }}/platform/zitadel/machinekey/malgary-backend.json"
+    dest: "{{ interim_secrets }}/zitadel-machine-key.json"
+    owner: "65532"
+    group: "65532"
+    mode: "0600"

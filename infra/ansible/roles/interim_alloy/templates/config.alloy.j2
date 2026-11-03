@@ -1,0 +1,41 @@
+// Managed by Ansible (role interim_alloy).
+discovery.docker "malgary" {
+  host    = "unix:///var/run/docker.sock"
+  filter {
+    name   = "label"
+    values = ["com.malgary.managed=true"]
+  }
+}
+
+discovery.relabel "targets" {
+  targets = discovery.docker.malgary.targets
+  rule {
+    source_labels = ["__meta_docker_container_label_com_malgary_component", "__meta_docker_container_label_com_malgary_role"]
+    regex         = "backend;|;guard"
+    action        = "keep"
+  }
+  rule {
+    source_labels = ["__meta_docker_container_label_com_malgary_tenant"]
+    target_label  = "tenant"
+  }
+  rule {
+    source_labels = ["__meta_docker_container_name"]
+    target_label  = "container"
+  }
+}
+
+prometheus.scrape "malgary" {
+  targets    = discovery.relabel.targets.output
+  forward_to = [prometheus.remote_write.grafana.receiver]
+}
+
+prometheus.remote_write "grafana" {
+  endpoint {
+    url = "{{ grafana_prometheus_url }}"
+    basic_auth {
+      username      = "{{ grafana_prometheus_user }}"
+      password_file = "/run/secrets/grafana-api-key"
+    }
+  }
+  external_labels = { host = "h178", cell = "i01" }
+}

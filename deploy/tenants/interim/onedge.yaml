@@ -1,0 +1,27 @@
+# Tenant #1 on the interim host (feature 002), test users only: Gmail accounts created for the
+# pilot (FR-015 treats any other domain as a real company user). Google sign-in once the shared
+# Google identity provider exists in Malgary sign-in; managed accounts meanwhile.
+apiVersion: malgary.io/v1
+kind: Tenant
+metadata:
+  slug: onedge
+  legalName: "On Edge (interim test)"
+spec:
+  cell: i01
+  identity:
+    signInMethods: [sso, managed]
+    upstreamIdps:
+      - type: google
+    allowedDomains: [gmail.com]
+    mfaRequired: true
+  subscription:
+    plan: ent-onedge
+    planVersion: 1
+    quantity: 10
+    paymentProvider: manual
+  gateways:
+    - pair: gw-i01
+  routing:
+    default:
+      mode: full_tunnel
+    callExclusions: []

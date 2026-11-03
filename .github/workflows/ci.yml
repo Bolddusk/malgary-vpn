@@ -46,6 +46,16 @@ jobs:
       - name: OpenAPI lint
         run: npx --yes @redocly/cli@2 lint api/openapi.yaml
 
+  images:
+    # Interim host images (feature 002): built, not pushed; the guard's rules are tested.
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: infra/images/gw-guard/rules_test.sh
+      - run: docker build -q -t malgary/gw-guard:ci infra/images/gw-guard
+      - run: docker build -q -t malgary/isolation-probe:ci infra/images/isolation-probe
+      - run: docker build -q -t malgary/malgaryd:ci backend
+
   secrets:
     runs-on: ubuntu-latest
     steps:

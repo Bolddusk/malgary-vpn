@@ -1,0 +1,40 @@
+---
+# Install Malgary on the interim host (feature 002, T032). Run only with the owner's go-ahead:
+#   ansible-playbook -i inventory/interim.yml interim-site.yml -e interim_owner_email=<you>
+# Run interim-check.yml first. Snapshots of the host's network configuration are taken before
+# and after (quickstart V3); compare them with tools/interim-diff.sh.
+- name: Malgary on the interim host
+  hosts: interim
+  gather_facts: true
+  pre_tasks:
+    - name: The owner's email is set (first Malgary sign-in account)
+      ansible.builtin.assert:
+        that: interim_owner_email is defined and '@' in interim_owner_email
+        fail_msg: "pass -e interim_owner_email=<your email>"
+  roles:
+    - interim_base
+    - interim_zitadel
+    - interim_backend
+    - role: interim_alloy
+      when: grafana_prometheus_url | length > 0
+  post_tasks:
+    - name: Snapshot the host's network configuration after changes (V3)
+      ansible.builtin.include_tasks: roles/interim_base/tasks/snapshot.yml
+      vars: {snapshot_label: after}
+
+    - name: Client ID for malgaryctl (created by malgaryd on first start)
+      ansible.builtin.slurp: {src: "{{ interim_secrets }}/cli-client-id"}
+      register: cli_id
+      retries: 12
+      delay: 5
+      until: cli_id is succeeded
+
+    - name: Next steps
+      ansible.builtin.debug:
+        msg:
+          - "Sign-in: https://id.{{ dns_zone }} as {{ interim_owner_email }}; the first password is in
+            {{ interim_secrets }}/zitadel-first-admin-password on the server (you must change it and set up MFA)."
+          - "On your machine: export MALGARY_CLIENT={{ cli_id.content | b64decode }}; malgaryctl login"
+          - "Then: malgaryctl plan apply -f deploy/plans/ent-testco.yaml; malgaryctl tenant apply -f deploy/tenants/interim/testco.yaml"
+          - "Then: malgaryctl isolation-test testco (users can connect only after it passes)"
+          - "Compare the before/after snapshots: infra/tools/interim-diff.sh infra/ansible/snapshots/<before> <after>"

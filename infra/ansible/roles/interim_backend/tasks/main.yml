@@ -1,0 +1,90 @@
+---
+# malgaryd on the interim host (feature 002, T031), plus the gateway guard and isolation probe
+# images. Images are built on the host from the committed source (git archive of HEAD), so
+# what runs is exactly what is in the repository.
+- name: Source archive of the current commit (on the operator's machine)
+  ansible.builtin.command:  # noqa: command-instead-of-module (git archive has no module)
+    cmd: git archive --format=tar.gz -o {{ interim_src_archive }} HEAD backend infra/images
+    chdir: "{{ playbook_dir }}/../.."
+  delegate_to: localhost
+  become: false
+  changed_when: false
+
+- name: Commit being deployed
+  ansible.builtin.command:
+    cmd: git rev-parse --short HEAD
+    chdir: "{{ playbook_dir }}/../.."
+  delegate_to: localhost
+  become: false
+  register: commit
+  changed_when: false
+
+- name: Build directory
+  ansible.builtin.file: {path: "{{ interim_root }}/platform/src", state: absent}
+
+- name: Unpack source
+  ansible.builtin.file: {path: "{{ interim_root }}/platform/src", state: directory, mode: "0700"}
+
+- name: Copy source
+  ansible.builtin.unarchive:
+    src: "{{ interim_src_archive }}"
+    dest: "{{ interim_root }}/platform/src"
+
+- name: Build images (malgaryd, guard, probe)
+  ansible.builtin.command:
+    cmd: docker build -q -t {{ item.tag }}:{{ commit.stdout }} -t {{ item.tag }}:local {{ item.args | default('') }} {{ item.dir }}
+    chdir: "{{ interim_root }}/platform/src"
+  loop:
+    - {tag: malgary/malgaryd, dir: backend}
+    - {tag: malgary/gw-guard, dir: infra/images/gw-guard}
+    - {tag: malgary/isolation-probe, dir: infra/images/isolation-probe, args: "--build-arg NETBIRD_VERSION={{ interim_netbird_version }}"}
+  loop_control: {label: "{{ item.tag }}"}
+  changed_when: true
+
+- name: Docker group of the host (malgaryd uses the socket as a member, not as root)
+  ansible.builtin.command: getent group docker
+  register: docker_group
+  changed_when: false
+
+- name: Read database passwords
+  ansible.builtin.slurp: {src: "{{ interim_secrets }}/{{ item }}"}
+  loop: [malgary-owner-db-password, malgary-app-db-password]
+  register: dbpw
+  no_log: true
+
+- name: Backend directory
+  ansible.builtin.file: {path: "{{ interim_root }}/platform/backend", state: directory, mode: "0700"}
+
+- name: Environment and compose file
+  ansible.builtin.template:
+    src: "{{ item.src }}"
+    dest: "{{ interim_root }}/platform/backend/{{ item.dest }}"
+    mode: "0600"
+  loop:
+    - {src: malgaryd.env.j2, dest: malgaryd.env}
+    - {src: compose.yaml.j2, dest: compose.yaml}
+  vars:
+    owner_pw: "{{ dbpw.results[0].content | b64decode }}"
+    app_pw: "{{ dbpw.results[1].content | b64decode }}"
+    docker_gid: "{{ docker_group.stdout.split(':')[2] }}"
+    image_tag: "{{ commit.stdout }}"
+  no_log: true
+
+- name: Start or update malgaryd
+  ansible.builtin.command:
+    cmd: docker compose -p malgary-api up -d --remove-orphans
+    chdir: "{{ interim_root }}/platform/backend"
+  register: up
+  changed_when: "'Started' in up.stderr or 'Recreated' in up.stderr"
+
+- name: Wait for the API through Traefik
+  ansible.builtin.uri:
+    url: "https://api.{{ dns_zone }}/healthz"
+    status_code: 204
+  register: health
+  until: health is succeeded
+  retries: 24
+  delay: 5
+
+- name: Remove the build source
+  ansible.builtin.file: {path: "{{ interim_root }}/platform/src", state: absent}
