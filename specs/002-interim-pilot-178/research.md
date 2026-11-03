@@ -95,8 +95,8 @@ container namespace with `NET_ADMIN`.
 | 3478–3480 UDP | STUN, one per tenant stack (3478 + index) | free |
 | 51821–51830 UDP | WireGuard, one per tenant routing peer | free |
 
-`ufw` is inactive, so published ports are reachable directly. **Verify** whether a Hetzner Cloud
-Firewall is attached to 178; if so, the owner opens these UDP ranges there (no host change).
+`ufw` is inactive and no Hetzner Cloud Firewall is attached (owner, 2026-11-03), so published
+ports are reachable directly.
 
 ## I6. Backend on 178
 
@@ -113,11 +113,18 @@ access to the host. On a dedicated cell the Ansible deployer with a sudo wrapper
 - Zitadel v4.20 (`zitadel` + `login` containers) with memory limits 768 MB + 256 MB, on the
   `coolify` network, database `zitadel` on the shared PostgreSQL. Sign-in is the most
   memory-sensitive piece on a swapping host; slow sign-in is alerted (spec edge case).
-- **Email**: `mail.laxycone.com:587` (proven working from 178 by other apps), credentials from
-  the owner. Sender `no-reply@vpn.malgary.com` needs SPF/DKIM records once the relay's DNS
-  requirements are known (handed to the owner as a DNS task).
+- **Email: deferred** (owner, 2026-11-03). Zitadel runs without SMTP. Managed-account
+  invitations use Zitadel's `ReturnCode` option: the backend builds the invitation URL and
+  returns it to the admin once (FR-012a, `MALGARY_INVITE_DELIVERY=link`). SSO users need no
+  invitation. Password resets are done by the operator in Zitadel's console until email exists.
+  Later: `mail.laxycone.com:587` (works from 178), sender `no-reply@vpn.malgary.com` with
+  SPF/DKIM; switching is one setting.
 
-## I8. Backups (FR-013–FR-015)
+## I8. Backups (FR-013–FR-015): deferred
+
+**Deferred during development** (owner, 2026-11-03). Only the gate is built now: the
+`backup_restore_test` table and the FR-015 check, so real company users stay blocked until the
+design below is in place. The design is kept for when it's built.
 
 **Decision**: a `malgary-backup` container (cron, 128 MB) on the `coolify` network dumps every
 Malgary database nightly with each database's own credentials, plus `/opt/malgary/{stacks,specs}`

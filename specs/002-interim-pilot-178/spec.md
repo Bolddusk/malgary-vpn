@@ -19,6 +19,20 @@ only, and a fixed exit date.
 The server also runs about 48 other Malgary applications. Protecting them is as important as
 making the VPN work.
 
+## Clarifications
+
+### Session 2026-11-03
+
+- Q: Is a Hetzner Cloud Firewall in front of the server? → A: No. The VPN's UDP ports are
+  reachable once published; no firewall step is needed.
+- Q: Are off-host backups needed now? → A: No. The project is in development; backups
+  (FR-013, FR-014) are deferred. The FR-015 gate stays in force, so no real company user can be
+  added until backups exist and a restore has passed. Backups and email will be set up with
+  the dedicated servers (owner: "we will do it when we get the servers").
+- Q: Is invitation email needed now? → A: No. Users who sign in with Google or Microsoft need no
+  invitation. Managed-account users get a one-time invitation link that the operator or tenant
+  admin passes on (FR-012a). Email delivery is added later without changing the flow.
+
 ## User Scenarios & Testing *(mandatory)*
 
 ### User Story 1 - A test user connects through the interim server (Priority: P1)
@@ -92,7 +106,10 @@ public site succeeds.
 
 ---
 
-### User Story 4 - Data is backed up before real users join (Priority: P2)
+### User Story 4 - Data is backed up before real users join (Priority: P2, deferred)
+
+> **Deferred (2026-11-03)**: not built during development. It must be done before the first real
+> company user joins; FR-015 enforces that.
 
 All VPN data (tenant databases, sign-in database, backend database, stack configuration) is backed
 up off the server on a schedule, and a restore has been tested.
@@ -192,8 +209,13 @@ server to another host, and an existing client reconnects without reconfiguratio
   after that date.
 - **FR-012**: The interim egress IP MUST NOT be presented to tenants as their allowlisting
   address: setup pages and admin views label it as temporary.
+- **FR-012a**: When email delivery isn't configured, inviting a managed-account user MUST return a
+  one-time invitation link to the operator or tenant admin instead of sending an email. Users
+  who sign in with Google or Microsoft need no invitation.
 
 **Backups**
+
+Deferred during development (see Clarifications). FR-015 stays in force.
 
 - **FR-013**: Every VPN database and the stack configuration MUST be backed up nightly,
   encrypted, to storage off the server, and kept 30 days.
@@ -233,7 +255,8 @@ server to another host, and an existing client reconnects without reconfiguratio
   test passes before any real company user joins.
 - **SC-006**: The move rehearsal completes with an existing client reconnecting without
   reconfiguration.
-- **SC-007**: Monthly extra cost of the interim pilot is under $15 (backup storage only).
+- **SC-007**: Monthly extra cost of the interim pilot is under $15 (backup storage only, once
+  backups are enabled; zero during development).
 
 ## Assumptions
 
@@ -247,12 +270,11 @@ server to another host, and an existing client reconnects without reconfiguratio
   Coolify version doesn't block this feature.
 - Test tenants: tenant #1 (onedge, with up to 10 test users from the company) and the test tenant
   (testco). Real company users in tenant #1 count as real users for FR-015.
-- Off-host backup storage: an S3-compatible bucket (for example Hetzner Object Storage), a small
-  monthly cost covered by SC-007.
-- Invitation email: sent through an email provider on port 587, which is open from the server.
-  The provider choice is made during planning.
-- If a Hetzner Cloud Firewall sits in front of the server, the operator opens the VPN's UDP ports
-  there. The host itself is not changed.
+- Off-host backup storage (when backups are enabled): an S3-compatible bucket (for example
+  Hetzner Object Storage), a small monthly cost covered by SC-007.
+- Invitation email: not configured during development (FR-012a). Later it goes through an email
+  provider on port 587, which is open from the server.
+- No Hetzner Cloud Firewall is attached to the server (owner, 2026-11-03).
 - The client portal, originally referred to as feature 002 in feature 001's documents, becomes
   feature 003.
 - Out of scope: failover, the dedicated cell itself, IPv6, and any change to the other

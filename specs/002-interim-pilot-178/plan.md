@@ -16,7 +16,9 @@ policy code changes. What's new:
   every private range and the host (replacing 001's host-network routing peer for this host);
 - **interim limits** in the backend (10 users, 2027-02-28, test tenants only, temporary-IP notice);
 - an **isolation test** that must pass before a tenant's users can reach the gateway;
-- **backups** to Hetzner Object Storage with a restore test that gates real users;
+- **backups**: only the restore-test gate is built now; the backup job is deferred during
+  development (spec Clarifications), so real company users stay blocked;
+- **invitation links** instead of email for managed accounts (FR-012a), since email is deferred;
 - Ansible playbooks to check, install, and later remove everything on 178 without touching the
   host firewall or other apps.
 
@@ -27,10 +29,10 @@ guard sidecar.
 
 **Primary Dependencies**: feature 001 stack (NetBird v0.82.0, Zitadel v4.20, malgaryd); Coolify
 4.3.6's Traefik (existing, labels only); `docker compose` CLI inside the malgaryd image;
-`rclone` + `age` in the backup image; Grafana Alloy container.
+Grafana Alloy container. (Deferred: `rclone` + `age` backup image.)
 
 **Storage**: shared PostgreSQL 18 (`buxe1z5wikkaftx5meckmr4w`) with databases `malgary`,
-`zitadel`, `nb_<tenant>`; Hetzner Object Storage (`fsn1`) for backups.
+`zitadel`, `nb_<tenant>`. (Deferred: Hetzner Object Storage for backups.)
 
 **Testing**: unit tests for the ComposeDeployer renderer and interim limits; integration tests
 (testcontainers) for the new migration and gates; on-host validation V1–V12
@@ -64,7 +66,7 @@ Coolify or other apps; UDP 443 is Traefik's; max 10 users; exit by 2027-02-28.
 | IX. Grow by configuration | Same DNS names and data model; moving out is restore + DNS change | ✅ | ✅ |
 | X. Portal is the product | Unchanged; dashboards IP-restricted to operators | ✅ | ✅ |
 | XI. Versioned plans/payments | Unchanged | ✅ | ✅ |
-| Interim exception conditions | Isolated gateway network, isolation test gate, memory limits, 10 test users, backups before real users, exit date enforced | ✅ | ✅ |
+| Interim exception conditions | Isolated gateway network, isolation test gate, memory limits, 10 test users, exit date enforced. "Backups before real users" is met by the FR-015 gate: real users are refused until a restore test passes; the backup job itself is deferred | ✅ | ✅ |
 
 Result: **PASS** with the deviations below.
 
@@ -88,7 +90,7 @@ backend/
 ├── internal/interim/                # limits, egress note, isolation and restore gates
 ├── internal/store/migrations/0005_interim.sql
 ├── cmd/malgaryctl/isolation.go      # isolation-test command (runs the probe client)
-├── cmd/malgaryctl/backup.go         # backup verify
+├── cmd/malgaryctl/backup.go         # backup verify (deferred)
 └── Dockerfile                       # malgaryd image (distroless + docker compose CLI)
 
 infra/ansible/
@@ -96,16 +98,16 @@ infra/ansible/
 ├── interim-site.yml                 # install on 178
 ├── interim-remove.yml               # exit: remove everything
 ├── inventory/interim.yml            # 178 only
-└── roles/interim-{base,zitadel,backend,backup,alloy}/
+└── roles/interim_{base,zitadel,backend,alloy}/   # interim_backup deferred
 
 infra/images/
 ├── gw-guard/                        # guard sidecar: nftables rules + wg exporter
 ├── isolation-probe/                 # disposable NetBird client + probe script
-└── backup/                          # rclone + age + pg_dump
+└── backup/                          # rclone + age + pg_dump (deferred)
 ```
 
 **Structure Decision**: additive. Feature 001's roles and modules stay for the dedicated cell;
-interim-only roles are prefixed `interim-` and removed from use at exit.
+interim-only roles are prefixed `interim_` and removed from use at exit.
 
 ## Phasing
 
@@ -113,11 +115,12 @@ interim-only roles are prefixed `interim-` and removed from use at exit.
    memory. Stop if anything contradicts the research.
 2. **Backend additions**: migration, interim limits, gates, ComposeDeployer, image, CLI commands,
    tests.
-3. **Images**: gw-guard, isolation-probe, backup.
+3. **Images**: gw-guard, isolation-probe (backup deferred).
 4. **Install on 178** (owner approval): base dirs and network, provisioner role, Zitadel,
-   malgaryd, backup, Alloy. Host snapshot before/after.
+   malgaryd, Alloy (optional). Host snapshot before/after.
 5. **First tenant (testco)**, isolation test, then onedge and test users.
-6. **Backups + restore test**, then real users allowed (up to 10 total).
+6. **Backups + restore test** (deferred; required before any real company user), then real
+   users allowed (up to 10 total).
 7. **Exit rehearsal** (move testco to a scratch host) and removal playbook dry run.
 
 ## Complexity Tracking

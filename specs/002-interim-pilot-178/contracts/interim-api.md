@@ -9,5 +9,10 @@ Added to `backend/api/openapi.yaml`; all are no-ops (404) when `MALGARY_INTERIM=
 | `POST /v1/backups/restore-tests` | operator | Record a restore test `{backupKey, backupTakenAt, passed, details}` | FR-015 |
 | `GET /v1/interim` | owner, operator, tenant_admin | `{active, maxUsers, usersUsed, until, daysLeft, egressNote}` | FR-010–FR-012 |
 
+Changed (not interim-only), FR-012a: when `MALGARY_INVITE_DELIVERY=link`, the user import
+response includes `inviteLink` (one-time Zitadel invitation URL) for each managed-account user
+created. The link is shown once and never stored by Malgary. `malgaryctl users import` prints
+them. SSO-only tenants get no links.
+
 Fixed error codes added: `interim_user_limit`, `interim_expired`, `interim_tenant_not_allowed`,
 `isolation_test_required`, `restore_test_required`.

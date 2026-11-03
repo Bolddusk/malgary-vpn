@@ -31,8 +31,13 @@ Rule: a tenant's access policy is enabled only when the latest result for its cu
 | passed | bool | |
 | details | jsonb | per-database row-count comparison |
 
-Rule: importing users into a tenant not in `MALGARY_INTERIM_TEST_TENANTS` — or any user marked as
-a real company user — is refused until one row has `passed = true` (FR-015).
+Rule: importing a **real company user** is refused until one row has `passed = true` (FR-015).
+A user is a real company user when the tenant is not in `MALGARY_INTERIM_TEST_TENANTS`, or the
+email's domain is not in `MALGARY_INTERIM_TEST_DOMAINS` (test users use accounts on those
+domains, for example `gmail.com`).
+
+The table is created now even though backups are deferred (spec Clarifications), so the gate
+works from day one: with no rows, only test users can be imported.
 
 ## Interim configuration (environment, not a table)
 
@@ -42,5 +47,7 @@ a real company user — is refused until one row has `passed = true` (FR-015).
 | `MALGARY_INTERIM_MAX_USERS` | `10` | users across all tenants (FR-010) |
 | `MALGARY_INTERIM_UNTIL` | `2027-02-28` | refuse imports after; 30-day warning (FR-011) |
 | `MALGARY_INTERIM_TEST_TENANTS` | `onedge,testco,malgary-ops` | tenants allowed |
+| `MALGARY_INTERIM_TEST_DOMAINS` | `gmail.com` | email domains that count as test users (FR-015) |
 | `MALGARY_INTERIM_EGRESS_NOTE` | `Temporary test IP; do not allowlist` | FR-012 |
+| `MALGARY_INVITE_DELIVERY` | `link` | `email` (Zitadel sends it) or `link` (returned to the admin), FR-012a; not interim-only |
 | `MALGARY_DEPLOYER` | `compose` | selects the ComposeDeployer (I1) |
