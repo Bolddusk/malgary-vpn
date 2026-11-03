@@ -54,9 +54,11 @@ func TestInterimLimits(t *testing.T) {
 		t.Fatal("a dedicated cell without a standby gateway must be refused (Principle IV)")
 	}
 
-	_, nbSrv := newFakeNetBird(t)
+	fake, nbSrv := newFakeNetBird(t)
+	fake.peerHosts = []string{"gw.i01"}
 	ten := &tenancy.Service{Store: st, Secrets: secrets.Resolver{Dir: filepath.Join(dir, "s")}, NetBird: netbird.NewFactory(100),
-		Deployer: &recordingDeployer{}, BaseDomain: strings.TrimPrefix(nbSrv.URL, "http://"), NetbirdVersion: "0.82.0"}
+		Deployer: &recordingDeployer{}, BaseDomain: strings.TrimPrefix(nbSrv.URL, "http://"), NetbirdVersion: "0.82.0",
+		IsolationRequired: true}
 	def := onedgeDefinition()
 	cell := "i01"
 	def.Spec.Cell = &cell
@@ -66,6 +68,30 @@ func TestInterimLimits(t *testing.T) {
 	tn, _, err := ten.Apply(ctx, def)
 	if err != nil {
 		t.Fatal("apply on the interim cell (no PTA registration needed):", err)
+	}
+	if _, err := st.Pool.Exec(ctx, "UPDATE tenant_stack SET management_url = $1", nbSrv.URL); err != nil {
+		t.Fatal(err)
+	}
+	waitFor(t, 20*time.Second, func() bool {
+		got, _ := ten.Get(ctx, tn.Id)
+		return got.Status == gen.TenantStatusActive || got.StackStatus == gen.TenantStackStatusFailed
+	})
+	if got, _ := ten.Get(ctx, tn.Id); got.Status != gen.TenantStatusActive {
+		t.Fatalf("interim tenant not active: %+v calls=%v", got, fake.calls)
+	}
+	accessEnabled := func() (bool, bool) {
+		fake.mu.Lock()
+		defer fake.mu.Unlock()
+		for _, p := range fake.policies {
+			if p["name"] == "malgary:access:all" {
+				on, _ := p["enabled"].(bool)
+				return on, true
+			}
+		}
+		return false, false
+	}
+	if on, found := accessEnabled(); !found || on {
+		t.Fatalf("before an isolation test the access policy must exist and be off (found=%v on=%v)", found, on)
 	}
 
 	now := time.Date(2026, 11, 4, 12, 0, 0, 0, time.UTC)
@@ -118,28 +144,51 @@ func TestInterimLimits(t *testing.T) {
 	_, err = us.Import(ctx, tn.Id, []gen.UserImport{{Email: "late@gmail.com"}})
 	wantCode(err, gen.InterimExpired)
 
-	// FR-009 records: the server recomputes "passed" from the probes.
-	res, err := svc.RecordIsolationTest(ctx, tn.Id, gen.IsolationTestInput{StackHash: "sha256:abcdef01", Passed: true, Results: []gen.IsolationProbe{
+	// FR-009 records: results apply to the stack's current hash, whatever the client sends, and
+	// the server recomputes "passed" from the probes.
+	var hash string
+	waitFor(t, 10*time.Second, func() bool {
+		stack, err := st.GetTenantStack(ctx, tn.Id)
+		if err == nil && stack.DesiredHash != nil {
+			hash = *stack.DesiredHash
+		}
+		return hash != ""
+	})
+	if hash == "" {
+		t.Fatal("stack never got a desired hash")
+	}
+	passedFor := func(h string) bool {
+		ok, _ := st.IsolationPassedForHash(ctx, db.IsolationPassedForHashParams{TenantID: tn.Id, StackHash: h})
+		return ok
+	}
+	forged := "sha256:forged"
+	res, err := svc.RecordIsolationTest(ctx, tn.Id, gen.IsolationTestInput{StackHash: &forged, Passed: true, Results: []gen.IsolationProbe{
 		{Target: "178.104.48.140:5432", Expected: gen.IsolationProbeExpectedBlocked, Got: gen.IsolationProbeGotReachable},
 	}}, "operator-1")
-	if err != nil || res.Passed {
-		t.Fatalf("a reachable private target must fail the test: %+v %v", res, err)
+	if err != nil || res.Passed || res.StackHash == nil || *res.StackHash != hash {
+		t.Fatalf("a reachable private target must fail the test, recorded for the current hash: %+v %v", res, err)
 	}
-	if ok, _ := st.IsolationPassedForHash(ctx, db.IsolationPassedForHashParams{TenantID: tn.Id, StackHash: "sha256:abcdef01"}); ok {
-		t.Fatal("hash must not count as passed")
+	if passedFor(hash) || passedFor(forged) {
+		t.Fatal("no hash may count as passed after a failure")
 	}
 	ip := "178.104.48.140"
-	if _, err := svc.RecordIsolationTest(ctx, tn.Id, gen.IsolationTestInput{StackHash: "sha256:abcdef01", Passed: true, EgressIp: &ip, Results: []gen.IsolationProbe{
+	if _, err := svc.RecordIsolationTest(ctx, tn.Id, gen.IsolationTestInput{Passed: true, EgressIp: &ip, Results: []gen.IsolationProbe{
 		{Target: "178.104.48.140:5432", Expected: gen.IsolationProbeExpectedBlocked, Got: gen.IsolationProbeGotBlocked},
 		{Target: "https://1.1.1.1", Expected: gen.IsolationProbeExpectedReachable, Got: gen.IsolationProbeGotReachable},
 	}}, "operator-1"); err != nil {
 		t.Fatal(err)
 	}
-	if ok, _ := st.IsolationPassedForHash(ctx, db.IsolationPassedForHashParams{TenantID: tn.Id, StackHash: "sha256:abcdef01"}); !ok {
-		t.Fatal("latest result passed: hash must count as passed")
+	if !passedFor(hash) {
+		t.Fatal("latest result passed: the current hash must count as passed")
 	}
-	if ok, _ := st.IsolationPassedForHash(ctx, db.IsolationPassedForHashParams{TenantID: tn.Id, StackHash: "sha256:other"}); ok {
+	if passedFor("sha256:other") {
 		t.Fatal("a new stack hash needs its own pass")
+	}
+	if _, _, err := ten.Reconcile(ctx, tn.Id); err != nil {
+		t.Fatal("reconcile:", err)
+	}
+	if on, _ := accessEnabled(); !on {
+		t.Fatal("after a passing isolation test the access policy must be on")
 	}
 
 	// Append-only for the application role.

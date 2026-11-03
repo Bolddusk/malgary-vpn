@@ -21,7 +21,7 @@ type CellInventory struct {
 	MaxUsers int32  `json:"maxUsers"`
 	// Interim marks a single shared host (feature 002): gateway pairs have no standby.
 	Interim bool `json:"interim,omitempty"`
-	Hosts    []struct {
+	Hosts   []struct {
 		Name     string `json:"name"`
 		Role     string `json:"role"`
 		Size     string `json:"size"`

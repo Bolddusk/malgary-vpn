@@ -1,0 +1,160 @@
+# Managed by malgaryd (ComposeDeployer) from StackSpec {{ .Spec.Hash }}. Do not edit.
+# Interim host (feature 002): routed by Coolify's Traefik through labels; the gateway runs in
+# the isolated {{ .Host.GatewayNetwork }} network behind the guard (research I4).
+name: nb-{{ .Slug }}
+
+x-malgary-labels: &malgary
+  com.malgary.managed: "true"
+  com.malgary.tenant: "{{ .Slug }}"
+
+x-logging: &logging
+  driver: json-file
+  options: {max-size: "50m", max-file: "2"}
+
+services:
+  netbird-server:
+    image: netbirdio/netbird-server:{{ .Spec.NetbirdVersion }}
+    restart: unless-stopped
+    command: ["--config", "/etc/netbird/config.yaml"]
+    environment:
+      NB_SETUP_PAT_ENABLED: "true"
+    ports:
+      - "{{ .StunPort }}:{{ .StunPort }}/udp"
+    volumes:
+      - data:/var/lib/netbird
+      - ./config.yaml:/etc/netbird/config.yaml:ro
+    networks:
+      traefik:
+        aliases: [nb-{{ .Slug }}-server]
+    mem_limit: {{ .Memory.Server }}m
+    memswap_limit: {{ .Memory.Server }}m
+    logging: *logging
+    labels:
+      <<: *malgary
+      traefik.enable: "true"
+      traefik.docker.network: "{{ .Host.TraefikNetwork }}"
+      traefik.http.routers.nb-{{ .Slug }}-grpc.rule: "Host(`{{ .Spec.ManagementDomain }}`) && (PathPrefix(`/signalexchange.SignalExchange/`) || PathPrefix(`/management.ManagementService/`))"
+      traefik.http.routers.nb-{{ .Slug }}-grpc.entrypoints: "{{ .Host.TraefikEntry }}"
+      traefik.http.routers.nb-{{ .Slug }}-grpc.tls.certresolver: "{{ .Host.TraefikResolver }}"
+      traefik.http.routers.nb-{{ .Slug }}-grpc.service: "nb-{{ .Slug }}-h2c"
+      traefik.http.routers.nb-{{ .Slug }}-grpc.priority: "100"
+      traefik.http.services.nb-{{ .Slug }}-h2c.loadbalancer.server.port: "80"
+      traefik.http.services.nb-{{ .Slug }}-h2c.loadbalancer.server.scheme: "h2c"
+      traefik.http.routers.nb-{{ .Slug }}-api.rule: "Host(`{{ .Spec.ManagementDomain }}`) && (PathPrefix(`/relay`) || PathPrefix(`/ws-proxy/`) || PathPrefix(`/api`) || PathPrefix(`/oauth2`))"
+      traefik.http.routers.nb-{{ .Slug }}-api.entrypoints: "{{ .Host.TraefikEntry }}"
+      traefik.http.routers.nb-{{ .Slug }}-api.tls.certresolver: "{{ .Host.TraefikResolver }}"
+      traefik.http.routers.nb-{{ .Slug }}-api.service: "nb-{{ .Slug }}-http"
+      traefik.http.routers.nb-{{ .Slug }}-api.priority: "100"
+      traefik.http.services.nb-{{ .Slug }}-http.loadbalancer.server.port: "80"
+
+  setup:
+    image: nginx:1.27-alpine
+    restart: unless-stopped
+    volumes:
+      - ./setup:/usr/share/nginx/html:ro
+    networks: [traefik]
+    mem_limit: {{ .Memory.Setup }}m
+    memswap_limit: {{ .Memory.Setup }}m
+    logging: *logging
+    labels:
+      <<: *malgary
+      traefik.enable: "true"
+      traefik.docker.network: "{{ .Host.TraefikNetwork }}"
+      traefik.http.routers.nb-{{ .Slug }}-setup.rule: "Host(`{{ .Spec.ManagementDomain }}`) && (Path(`/`) || PathPrefix(`/setup`))"
+      traefik.http.routers.nb-{{ .Slug }}-setup.entrypoints: "{{ .Host.TraefikEntry }}"
+      traefik.http.routers.nb-{{ .Slug }}-setup.tls.certresolver: "{{ .Host.TraefikResolver }}"
+      traefik.http.routers.nb-{{ .Slug }}-setup.priority: "90"
+      traefik.http.routers.nb-{{ .Slug }}-setup.middlewares: "nb-{{ .Slug }}-setup-path"
+      traefik.http.middlewares.nb-{{ .Slug }}-setup-path.replacepathregex.regex: "^/setup/?$"
+      traefik.http.middlewares.nb-{{ .Slug }}-setup-path.replacepathregex.replacement: "/"
+      traefik.http.services.nb-{{ .Slug }}-setup.loadbalancer.server.port: "80"
+{{- if .Host.OperatorAllow }}
+
+  # NetBird's own dashboard: operators only (Principle X). Not routed at all without an allowlist.
+  dashboard:
+    image: netbirdio/dashboard:{{ .DashboardVersion }}
+    restart: unless-stopped
+    env_file: ./dashboard.env
+    networks: [traefik]
+    mem_limit: {{ .Memory.Dashboard }}m
+    memswap_limit: {{ .Memory.Dashboard }}m
+    logging: *logging
+    labels:
+      <<: *malgary
+      traefik.enable: "true"
+      traefik.docker.network: "{{ .Host.TraefikNetwork }}"
+      traefik.http.routers.nb-{{ .Slug }}-dashboard.rule: "Host(`{{ .Spec.ManagementDomain }}`)"
+      traefik.http.routers.nb-{{ .Slug }}-dashboard.entrypoints: "{{ .Host.TraefikEntry }}"
+      traefik.http.routers.nb-{{ .Slug }}-dashboard.tls.certresolver: "{{ .Host.TraefikResolver }}"
+      traefik.http.routers.nb-{{ .Slug }}-dashboard.priority: "10"
+      traefik.http.routers.nb-{{ .Slug }}-dashboard.middlewares: "nb-{{ .Slug }}-operators"
+      traefik.http.middlewares.nb-{{ .Slug }}-operators.ipallowlist.sourcerange: "{{ join .Host.OperatorAllow "," }}"
+      traefik.http.services.nb-{{ .Slug }}-dashboard.loadbalancer.server.port: "80"
+{{- end }}
+{{- with .Peer }}
+
+  # The tenant's gateway: a NetBird client in the isolated gateway network (research I4).
+  routing-peer:
+    image: netbirdio/netbird:{{ $.Spec.NetbirdVersion }}
+    restart: unless-stopped
+    env_file: ./peer.env
+    environment:
+      NB_MANAGEMENT_URL: "https://{{ $.Spec.ManagementDomain }}:443"
+      # Must equal the routing peer's host: the backend finds the gateway peer by this name.
+      NB_HOSTNAME: "{{ .Host }}"
+      NB_INTERFACE_NAME: "{{ .WGInterface }}"
+      NB_WIREGUARD_PORT: "{{ .WGPort }}"
+      NB_LOG_LEVEL: "info"
+    cap_add: [NET_ADMIN]
+    sysctls:
+      net.ipv4.ip_forward: "1"
+      net.ipv4.conf.all.src_valid_mark: "1"
+    devices: ["/dev/net/tun:/dev/net/tun"]
+    ports:
+      - "{{ .WGPort }}:{{ .WGPort }}/udp"
+    volumes:
+      - peer:/var/lib/netbird
+    networks: [gateway]
+    mem_limit: {{ $.Memory.Peer }}m
+    memswap_limit: {{ $.Memory.Peer }}m
+    logging: *logging
+    labels:
+      <<: *malgary
+      com.malgary.role: "routing-peer"
+
+  # Guard: forward-path drop of private ranges and the host, re-applied every 30 s.
+  guard:
+    image: {{ $.GuardImage }}
+    restart: unless-stopped
+    network_mode: "service:routing-peer"
+    cap_add: [NET_ADMIN]
+    environment:
+      GUARD_WG_IFACE: "{{ .WGInterface }}"
+      GUARD_HOST_IP: "{{ $.Host.HostPublicIP }}"
+      GUARD_TENANT: "{{ $.Slug }}"
+    depends_on: [routing-peer]
+    mem_limit: {{ $.Memory.Guard }}m
+    memswap_limit: {{ $.Memory.Guard }}m
+    logging: *logging
+    labels:
+      <<: *malgary
+      com.malgary.role: "guard"
+{{- end }}
+
+networks:
+  traefik:
+    name: {{ .Host.TraefikNetwork }}
+    external: true
+{{- if .Peer }}
+  gateway:
+    name: {{ .Host.GatewayNetwork }}
+    external: true
+{{- end }}
+
+volumes:
+  data:
+    labels: *malgary
+{{- if .Peer }}
+  peer:
+    labels: *malgary
+{{- end }}

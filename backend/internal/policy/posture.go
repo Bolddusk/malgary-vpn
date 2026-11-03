@@ -21,8 +21,10 @@ type Posture struct {
 // ApplyAccess makes users reach the gateways only through Malgary's access policies, with the
 // tenant's posture checks attached. Peers that fail a check lose access to the gateways, so
 // they can't reach any protected destination until fixed (FR-018). It also removes NetBird's
-// default all-to-all policy, so users' devices can't reach each other.
-func ApplyAccess(ctx context.Context, c *rest.Client, rules []Posture, gatewaysGroup, allUsersGroup string) error {
+// default all-to-all policy, so users' devices can't reach each other. With enabled false the
+// policies exist but are switched off, so nobody reaches the gateways (interim isolation gate,
+// feature 002 FR-009).
+func ApplyAccess(ctx context.Context, c *rest.Client, rules []Posture, gatewaysGroup, allUsersGroup string, enabled bool) error {
 	checks, err := c.PostureChecks.List(ctx)
 	if err != nil {
 		return fmt.Errorf("list posture checks: %w", err)
@@ -60,9 +62,9 @@ func ApplyAccess(ctx context.Context, c *rest.Client, rules []Posture, gatewaysG
 		name := "malgary:access:" + suffix
 		wantPolicies[name] = true
 		req := nbapi.PolicyUpdate{
-			Name: name, Enabled: true, SourcePostureChecks: &checkIDs,
+			Name: name, Enabled: enabled, SourcePostureChecks: &checkIDs,
 			Rules: []nbapi.PolicyRuleUpdate{{
-				Name: name, Enabled: true, Action: nbapi.PolicyRuleUpdateActionAccept, Bidirectional: false,
+				Name: name, Enabled: enabled, Action: nbapi.PolicyRuleUpdateActionAccept, Bidirectional: false,
 				Protocol: nbapi.PolicyRuleUpdateProtocolAll, Sources: &[]string{src}, Destinations: &[]string{gw},
 			}},
 		}
@@ -125,7 +127,7 @@ func upsertCheck(ctx context.Context, c *rest.Client, existing []nbapi.PostureCh
 func upsertPolicy(ctx context.Context, c *rest.Client, existing []nbapi.Policy, req nbapi.PolicyUpdate) error {
 	for _, p := range existing {
 		if p.Name == req.Name && p.Id != nil {
-			if slices.Equal(p.SourcePostureChecks, *req.SourcePostureChecks) && p.Enabled {
+			if slices.Equal(p.SourcePostureChecks, *req.SourcePostureChecks) && p.Enabled == req.Enabled {
 				return nil
 			}
 			_, err := c.Policies.Update(ctx, *p.Id, nbapi.PolicyCreate(req))

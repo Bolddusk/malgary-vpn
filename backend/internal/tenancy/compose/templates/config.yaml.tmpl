@@ -1,0 +1,33 @@
+# Managed by malgaryd (ComposeDeployer) from StackSpec {{ .Spec.Hash }}. Do not edit.
+server:
+  listenAddress: ":80"
+  exposedAddress: "https://{{ .Spec.ManagementDomain }}:443"
+  stunPorts:
+    - {{ .StunPort }}
+  metricsPort: 9090
+  healthcheckAddress: ":9000"
+  logLevel: "info"
+  logFile: "console"
+
+  authSecret: "{{ .Secrets.RelayAuth }}"
+  dataDir: "/var/lib/netbird"
+
+  auth:
+    issuer: "https://{{ .Spec.ManagementDomain }}/oauth2"
+    signKeyRefreshEnabled: true
+    sessionCookieEncryptionKey: "{{ .Secrets.SessionKey }}"
+    dashboardRedirectURIs:
+      - "https://{{ .Spec.ManagementDomain }}/nb-auth"
+      - "https://{{ .Spec.ManagementDomain }}/nb-silent-auth"
+    cliRedirectURIs:
+      - "http://localhost:53000/"
+
+  reverseProxy:
+    trustedHTTPProxies:
+      - "172.16.0.0/12"
+      - "10.0.0.0/8"
+
+  store:
+    engine: "postgres"
+    dsn: "host={{ .Spec.Database.Host }} user={{ .Spec.Database.User }} password={{ .Secrets.DBPassword }} dbname={{ .Spec.Database.Name }} port=5432 sslmode=disable"
+    encryptionKey: "{{ .Secrets.DatastoreKey }}"

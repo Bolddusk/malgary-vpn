@@ -38,3 +38,5 @@ infra/ansible/.vault-pass*
 
 # Claude Code local settings
 .claude/settings.local.json
+__pycache__/
+*.pyc

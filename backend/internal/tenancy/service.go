@@ -33,8 +33,11 @@ type Service struct {
 	Deployer       Deployer
 	BaseDomain     string // vpn.malgary.com
 	NetbirdVersion string
-	StackDBHost    string  // host.docker.internal
-	Billing        Billing // nil disables subscriptions (tests of provisioning only)
+	StackDBHost    string // host.docker.internal
+	// IsolationRequired keeps access policies off until an isolation test passed for the
+	// current stack hash (interim host, feature 002 FR-009).
+	IsolationRequired bool
+	Billing           Billing // nil disables subscriptions (tests of provisioning only)
 }
 
 // Billing is what tenancy needs from internal/billing, inside the apply transaction.

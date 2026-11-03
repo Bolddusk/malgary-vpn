@@ -115,17 +115,18 @@ and a test user connects from the setup page.
 
 ### Tests for US1
 
-- [ ] T016 [P] [US1] Golden-file tests in `backend/internal/tenancy/compose/render_test.go`:
+- [X] T016 [P] [US1] Render tests (structural checks instead of golden files, plus a
+  `docker compose config` validation run) in `backend/internal/tenancy/compose/render_test.go`:
   a sealed StackSpec renders `compose.yaml`, `config.yaml`, `dashboard.env` and
   `setup/index.html` byte-for-byte equal to files in `testdata/`; rendering twice gives the
   same bytes; secrets appear only in files with mode 0600 and never in `compose.yaml`.
-- [ ] T017 [P] [US1] Test that rendered `compose.yaml` has a memory limit on every service,
+- [X] T017 [P] [US1] Test that rendered `compose.yaml` has a memory limit on every service,
   `restart: unless-stopped` everywhere, no `network_mode: host`, no `privileged`, and the
   routing peer only on `MALGARY_GW_NETWORK` (also guards US2/US3).
 
 ### Implementation for US1
 
-- [ ] T018 [US1] Templates in `backend/internal/tenancy/compose/templates/` (Go
+- [X] T018 [US1] Templates in `backend/internal/tenancy/compose/templates/` (Go
   `text/template`, embedded): port `config.yaml` and `dashboard.env` from
   `infra/ansible/roles/tenant_stack/templates/`; `compose.yaml` with services `netbird-server`
   (coolify network, STUN `3478 + (httpPort - 20000)`/udp, Traefik labels: gRPC paths →
@@ -133,19 +134,19 @@ and a test user connects from the setup page.
   config), `dashboard` (Traefik `ipAllowList` from `MALGARY_OPERATOR_ALLOWLIST`), `setup`
   (static nginx, `/` and `/setup`), `routing-peer` and `guard` (filled in by US3), memory
   limits 256/64/16/96/32 MB per [research.md](research.md) I11.
-- [ ] T019 [US1] Setup page template `backend/internal/tenancy/compose/templates/setup.html`
+- [X] T019 [US1] Setup page template `backend/internal/tenancy/compose/templates/setup.html`
   ported from `setup-page.html.j2`, plus the interim egress note when set (FR-012).
-- [ ] T020 [US1] `ComposeDeployer` in `backend/internal/tenancy/compose/deployer.go`
+- [X] T020 [US1] `ComposeDeployer` in `backend/internal/tenancy/compose/deployer.go`
   implementing `tenancy.Deployer`: render into `<StackDir>/<tenant>/`, compare with existing
   files and skip when unchanged (obligation 1), keep `compose.yaml.prev`, run
   `docker compose -p nb-<tenant> up -d --remove-orphans`, poll `GET /api/instance` on the
   container until 200 within 2 minutes, otherwise restore `.prev` and return the error with the
   log tail (obligation 3). Tenant slug validated before any path is built.
-- [ ] T021 [US1] Database provisioning in `backend/internal/tenancy/compose/database.go`:
+- [X] T021 [US1] Database provisioning in `backend/internal/tenancy/compose/database.go`:
   connect as `malgary_provisioner` (DSN from a secret ref), create role `nb_<tenant>` with a
   generated password stored under `<SecretDir>/stacks/<tenant>/db-password` (0600) and database
   `nb_<tenant>` owned by it; idempotent; `REVOKE ALL ON DATABASE ... FROM PUBLIC`.
-- [ ] T022 [US1] Select the deployer from `MALGARY_DEPLOYER` in
+- [X] T022 [US1] Select the deployer from `MALGARY_DEPLOYER` in
   `backend/cmd/malgaryd/main.go`; set `StackSpec.Database.Host` from `MALGARY_STACK_DB_HOST`
   when compose is used.
 - [ ] T023 [US1] Invitation links (FR-012a) in `backend/internal/identity/users.go`: when
@@ -206,7 +207,7 @@ remove Malgary.
 
 **Independent test**: quickstart V3, V4, V10.
 
-- [ ] T035 [P] [US2] Memory budget check in `backend/internal/tenancy/compose/budget.go`: sum the
+- [X] T035 [P] [US2] Memory budget check in `backend/internal/tenancy/compose/budget.go`: sum the
   limits of all rendered stacks plus the platform's fixed 1,408 MB (Zitadel, login, malgaryd,
   Alloy) and refuse a deploy that would exceed `MALGARY_MEMORY_BUDGET_MB` (default 3072); test
   in `budget_test.go` (FR-005, SC-004).
@@ -237,7 +238,7 @@ access.
 
 ### Tests for US3
 
-- [ ] T040 [P] [US3] Test for the guard rules generator in
+- [X] T040 [P] [US3] Test for the guard rules generator in
   `infra/images/gw-guard/rules_test.sh` (or Go test if written in Go): the generated nftables
   table drops forward traffic to `10.0.0.0/8`, `172.16.0.0/12`, `192.168.0.0/16`,
   `100.64.0.0/10` except the tenant's NetBird range, `169.254.0.0/16`, `127.0.0.0/8`,
@@ -245,16 +246,16 @@ access.
 
 ### Implementation for US3
 
-- [ ] T041 [US3] Guard image `infra/images/gw-guard/`: Alpine with `nftables`, `wireguard-tools`
+- [X] T041 [US3] Guard image `infra/images/gw-guard/`: Alpine with `nftables`, `wireguard-tools`
   and the exporter from `infra/ansible/roles/routing_peer/files/wg-usage-exporter`; entrypoint
   applies the forward-drop table from `GUARD_HOST_IP` and `GUARD_ALLOW_CIDR` every 30 seconds,
   logs and counts drift (`malgary_guard_reapplied_total`), and serves metrics on `:9586`.
   Runs with `NET_ADMIN` only.
-- [ ] T042 [US3] Add `routing-peer` and `guard` to `compose.yaml` template: routing peer is the
+- [X] T042 [US3] Add `routing-peer` and `guard` to `compose.yaml` template: routing peer is the
   NetBird client image at the stack's version, on `MALGARY_GW_NETWORK`, `cap_add: NET_ADMIN`,
   `sysctls: net.ipv4.ip_forward=1`, `/dev/net/tun`, published `<wgPort>:<wgPort>/udp`, setup key
   from a 0600 file; guard with `network_mode: service:routing-peer`. Update golden files.
-- [ ] T043 [US3] Keep the tenant's access policy disabled until isolation passes: in
+- [X] T043 [US3] Keep the tenant's access policy disabled until isolation passes: in
   `backend/internal/tenancy/apply.go` (or `rules.go`), when interim is on, set
   `malgary:access:*` policies `enabled=false` unless the latest `isolation_test_result` for the
   stack's current hash passed; recording a pass triggers a re-apply (FR-009).

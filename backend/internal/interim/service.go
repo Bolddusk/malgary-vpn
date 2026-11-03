@@ -56,14 +56,20 @@ func (s *Service) RecordIsolationTest(ctx context.Context, tenantID uuid.UUID, i
 	}
 	var row db.IsolationTestResult
 	err = s.Store.WithTx(ctx, func(q *db.Queries, _ pgx.Tx) error {
-		if _, err := q.GetTenant(ctx, tenantID); err != nil {
-			if store.IsNotFound(err) {
-				return httpapi.ErrNotFound
-			}
+		stack, err := q.GetTenantStack(ctx, tenantID)
+		if store.IsNotFound(err) {
+			return httpapi.ErrNotFound
+		}
+		if err != nil {
 			return err
 		}
+		if stack.DesiredHash == nil {
+			return httpapi.Errf(http.StatusConflict, gen.StackNotReady, "the tenant's stack has not been deployed yet")
+		}
+		// The result applies to the stack as deployed now, whatever the client sent.
+		in.StackHash = stack.DesiredHash
 		row, err = q.CreateIsolationTestResult(ctx, db.CreateIsolationTestResultParams{
-			ID: uuid.Must(uuid.NewV7()), TenantID: tenantID, StackHash: in.StackHash, Passed: passed,
+			ID: uuid.Must(uuid.NewV7()), TenantID: tenantID, StackHash: *stack.DesiredHash, Passed: passed,
 			EgressIp: egress, Results: results, RanBy: ranBy,
 		})
 		if err != nil {
@@ -115,7 +121,7 @@ func (s *Service) RecordRestoreTest(ctx context.Context, in gen.RestoreTestInput
 }
 
 func isolationView(r db.IsolationTestResult) gen.IsolationTest {
-	v := gen.IsolationTest{Id: r.ID, StackHash: r.StackHash, Passed: r.Passed, RanAt: r.RanAt, RanBy: r.RanBy, Results: []gen.IsolationProbe{}}
+	v := gen.IsolationTest{Id: r.ID, StackHash: &r.StackHash, Passed: r.Passed, RanAt: r.RanAt, RanBy: r.RanBy, Results: []gen.IsolationProbe{}}
 	_ = json.Unmarshal(r.Results, &v.Results)
 	if r.EgressIp != nil {
 		ip := r.EgressIp.String()

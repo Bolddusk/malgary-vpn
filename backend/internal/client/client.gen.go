@@ -768,21 +768,25 @@ type IsolationProbeGot string
 
 // IsolationTest defines model for IsolationTest.
 type IsolationTest struct {
-	EgressIp  *string            `json:"egressIp,omitempty"`
-	Id        openapi_types.UUID `json:"id"`
-	Passed    bool               `json:"passed"`
-	RanAt     time.Time          `json:"ranAt"`
-	RanBy     string             `json:"ranBy"`
-	Results   []IsolationProbe   `json:"results"`
-	StackHash string             `json:"stackHash"`
+	EgressIp *string            `json:"egressIp,omitempty"`
+	Id       openapi_types.UUID `json:"id"`
+	Passed   bool               `json:"passed"`
+	RanAt    time.Time          `json:"ranAt"`
+	RanBy    string             `json:"ranBy"`
+	Results  []IsolationProbe   `json:"results"`
+
+	// StackHash Set by the server to the stack's current hash when the result is recorded.
+	StackHash *string `json:"stackHash,omitempty"`
 }
 
 // IsolationTestInput defines model for IsolationTestInput.
 type IsolationTestInput struct {
-	EgressIp  *string          `json:"egressIp,omitempty"`
-	Passed    bool             `json:"passed"`
-	Results   []IsolationProbe `json:"results"`
-	StackHash string           `json:"stackHash"`
+	EgressIp *string          `json:"egressIp,omitempty"`
+	Passed   bool             `json:"passed"`
+	Results  []IsolationProbe `json:"results"`
+
+	// StackHash Set by the server to the stack's current hash when the result is recorded.
+	StackHash *string `json:"stackHash,omitempty"`
 }
 
 // Money defines model for Money.

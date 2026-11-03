@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"log/slog"
 	"net/http"
+	"net/url"
 	"os"
 	"os/signal"
 	"path/filepath"
@@ -30,6 +31,7 @@ import (
 	"malgary/backend/internal/secrets"
 	"malgary/backend/internal/store"
 	"malgary/backend/internal/tenancy"
+	"malgary/backend/internal/tenancy/compose"
 	"malgary/backend/internal/usage"
 	"malgary/backend/internal/users"
 )
@@ -84,12 +86,18 @@ func run() error {
 		return err
 	}
 
+	deployer, dbHost, err := newDeployer(cfg, res)
+	if err != nil {
+		return err
+	}
 	ten := &tenancy.Service{
 		Store: st, Secrets: res, Identity: idp, NetBird: netbird.NewFactory(20),
-		Deployer:       tenancy.AnsibleDeployer{SpecDir: cfg.SpecDir},
+		Deployer:       deployer,
 		BaseDomain:     cfg.BaseDomain,
 		NetbirdVersion: cfg.NetbirdVersion,
-		StackDBHost:    "host.docker.internal",
+		StackDBHost:    dbHost,
+		// On the interim host users reach the gateway only after an isolation test (FR-009).
+		IsolationRequired: cfg.Interim.Active,
 	}
 	claimsKey, err := res.Resolve(secrets.Ref("zitadel-claims-signing-key"))
 	if err != nil {
@@ -156,6 +164,46 @@ func run() error {
 	shutdown, cancel := context.WithTimeout(context.Background(), 20*time.Second)
 	defer cancel()
 	return srv.Shutdown(shutdown)
+}
+
+// newDeployer picks the Ansible deployer (dedicated cells) or the Compose deployer (interim
+// host, feature 002) and returns the database host the stacks use.
+func newDeployer(cfg config.Config, res secrets.Resolver) (tenancy.Deployer, string, error) {
+	if cfg.Deployer != "compose" {
+		return tenancy.AnsibleDeployer{SpecDir: cfg.SpecDir}, "host.docker.internal", nil
+	}
+	pw, err := res.Resolve(cfg.Compose.ProvisionerPassRef)
+	if err != nil {
+		return nil, "", fmt.Errorf("provisioner password: %w", err)
+	}
+	dsn := (&url.URL{
+		Scheme: "postgres", User: url.UserPassword("malgary_provisioner", strings.TrimSpace(string(pw))),
+		Host: cfg.Compose.StackDBHost + ":5432", Path: "/postgres", RawQuery: "sslmode=disable",
+	}).String()
+	d := &compose.Deployer{
+		StackDir: cfg.Compose.StackDir, Secrets: res, Memory: compose.DefaultMemory,
+		DB: compose.Provisioner{DSN: dsn}, Runner: compose.DockerCLI{},
+		DashboardVersion: envOr("MALGARY_NETBIRD_DASHBOARD_VERSION", "v2.40.0"),
+		GuardImage:       envOr("MALGARY_GUARD_IMAGE", "malgary/gw-guard:local"),
+		Host: compose.Host{
+			TraefikNetwork: cfg.Compose.TraefikNetwork, TraefikEntry: cfg.Compose.TraefikEntry,
+			TraefikResolver: cfg.Compose.TraefikResolver, GatewayNetwork: cfg.Compose.GatewayNetwork,
+			HostPublicIP: cfg.Compose.HostPublicIP, OperatorAllow: cfg.Compose.OperatorAllow,
+			EgressNote: cfg.Interim.EgressNote,
+		},
+	}
+	if cfg.Interim.Active {
+		// Zitadel + login (1,024 MB), malgaryd (256 MB) and Alloy (128 MB), research I11.
+		d.BudgetMB, d.PlatformMB = cfg.Interim.MemoryBudget, 1408
+	}
+	return d, cfg.Compose.StackDBHost, nil
+}
+
+func envOr(key, def string) string {
+	if v := os.Getenv(key); v != "" {
+		return v
+	}
+	return def
 }
 
 // ops adapts usage and reconcile to httpapi.OpsService.

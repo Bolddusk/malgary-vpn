@@ -1,0 +1,104 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Set up Malgary VPN · {{ .Spec.Tenant }}</title>
+<style>
+  :root {
+    --bg: #f5f6f4; --ink: #1c2320; --muted: #5b6660; --panel: #ffffff; --line: #c3cac5;
+    --accent: #0a7766; --accent-soft: #dcefeb;
+    --body: "IBM Plex Sans", "Segoe UI", system-ui, sans-serif;
+    --mono: "IBM Plex Mono", ui-monospace, Menlo, Consolas, monospace;
+    color-scheme: light;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root { --bg: #121614; --ink: #e3e8e5; --muted: #98a39d; --panel: #1a201d; --line: #36403b;
+            --accent: #3fc8af; --accent-soft: #173a33; color-scheme: dark; }
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--ink); font: 16px/1.6 var(--body); padding: 32px 20px 64px; }
+  main { max-width: 760px; margin: 0 auto; display: grid; gap: 24px; }
+  h1 { font-size: 28px; line-height: 1.2; margin: 0; text-wrap: balance; }
+  h2 { font-size: 19px; margin: 0 0 8px; }
+  p { margin: 0 0 10px; }
+  .lede { color: var(--muted); }
+  section { background: var(--panel); border: 1px solid var(--line); border-radius: 12px; padding: 20px; }
+  ol { margin: 0; padding-left: 22px; display: grid; gap: 8px; }
+  code, .cmd { font-family: var(--mono); font-size: 14px; }
+  .cmd { display: flex; gap: 8px; align-items: center; background: var(--accent-soft); border-radius: 8px; padding: 10px 12px; overflow-x: auto; }
+  .cmd code { flex: 1; white-space: nowrap; }
+  button { font: 600 14px var(--body); color: var(--panel); background: var(--accent); border: 0; border-radius: 6px; padding: 6px 12px; cursor: pointer; }
+  button:focus-visible, a:focus-visible { outline: 3px solid var(--accent); outline-offset: 2px; }
+  a { color: var(--accent); }
+  .server { font-family: var(--mono); font-weight: 600; color: var(--accent); }
+  .check { border-left: 4px solid var(--accent); }
+  .warn { color: var(--muted); font-size: 14px; }
+  .tabs { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 12px; }
+  .tabs a { text-decoration: none; border: 1px solid var(--line); border-radius: 999px; padding: 4px 12px; color: var(--ink); }
+</style>
+</head>
+<body>
+<main>
+  <header>
+    <h1>Set up Malgary VPN</h1>
+    <p class="lede">Three steps, about five minutes. You'll install the free NetBird app, point it at your company's Malgary server, and sign in with your work account.</p>
+  </header>
+
+  <section>
+    <h2>Your server address</h2>
+    <p>Use exactly this address in step 2. It's specific to your company.</p>
+    <div class="cmd"><code id="server">https://{{ .Spec.ManagementDomain }}</code><button type="button" data-copy="server">Copy</button></div>
+  </section>
+
+  <section id="desktop">
+    <div class="tabs"><a href="#desktop">Windows, macOS, Linux</a><a href="#mobile">iPhone, Android</a></div>
+    <h2>On a laptop</h2>
+    <ol>
+      <li>Download and install NetBird from <a href="https://netbird.io/download">netbird.io/download</a>.</li>
+      <li>Open a terminal (on Windows: <em>Command Prompt</em> or <em>PowerShell</em>) and run:
+        <div class="cmd"><code id="up">netbird up --management-url https://{{ .Spec.ManagementDomain }}:443</code><button type="button" data-copy="up">Copy</button></div>
+        <p class="warn">Prefer the app window? Open NetBird → Settings → Advanced → Management URL, and paste the server address above.</p>
+      </li>
+      <li>Your browser opens the <strong>Malgary sign-in</strong> page. Sign in with your work account. If asked, set up your authenticator app (MFA).</li>
+    </ol>
+  </section>
+
+  <section id="mobile">
+    <h2>On a phone</h2>
+    <ol>
+      <li>Install <strong>NetBird</strong>: search "NetBird" in the App Store, or open <a href="https://play.google.com/store/apps/details?id=io.netbird.client">Google Play</a>.</li>
+      <li>Open it and tap <strong>Change server</strong> (Android: menu ☰ → Change Server). Enter <span class="server">https://{{ .Spec.ManagementDomain }}</span> and confirm.</li>
+      <li>Tap <strong>Connect</strong> and sign in on the Malgary sign-in page.</li>
+    </ol>
+  </section>
+
+  <section class="check">
+    <h2>Check it worked</h2>
+    <ol>
+      <li>The sign-in page said <strong>Malgary</strong>, not NetBird. If you saw a NetBird sign-in page, the app is still pointed at NetBird's own service: repeat step 2 with the address above.</li>
+      <li>Open <a href="https://api.ipify.org">api.ipify.org</a>. It should show your company's VPN address{{ if .EgressIP }}: <span class="server">{{ .EgressIP }}</span>{{ end }}.</li>{{ if .EgressNote }}
+      <li class="warn"><strong>Note:</strong> {{ .EgressNote }}. This address will change when the service moves to its permanent servers, so don't add it to any allowlist.</li>{{ end }}
+    </ol>
+  </section>
+
+  <section>
+    <h2>If something goes wrong</h2>
+    <ol>
+      <li><strong>"Your account isn't allowed"</strong>: sign in with your work account, not a personal one. If you're sure it's right, ask your IT admin to add you.</li>
+      <li><strong>Sign-in keeps failing or loops</strong>: check your computer's date and time are set automatically, then try again.</li>
+      <li><strong>Connected but sites don't load</strong>: disconnect and connect again from the NetBird icon. Calls (Meet, Teams, Zoom) never use the VPN.</li>
+    </ol>
+    <p class="warn">Still stuck? Contact your IT admin and mention the server address above.</p>
+  </section>
+</main>
+<script>
+  document.querySelectorAll("button[data-copy]").forEach(function (b) {
+    b.addEventListener("click", function () {
+      var t = document.getElementById(b.dataset.copy).textContent;
+      navigator.clipboard.writeText(t).then(function () { b.textContent = "Copied"; setTimeout(function () { b.textContent = "Copy"; }, 1500); }, function () {});
+    });
+  });
+</script>
+</body>
+</html>

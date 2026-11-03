@@ -28,7 +28,7 @@ func startPostgres(t *testing.T) *store.Store {
 	ctx := context.Background()
 	c, err := tcpg.Run(ctx, "postgres:17-alpine",
 		tcpg.WithDatabase("malgary"), tcpg.WithUsername("postgres"), tcpg.WithPassword("postgres"),
-		testcontainers.WithWaitStrategy(wait.ForLog("database system is ready to accept connections").WithOccurrence(2).WithStartupTimeout(90*time.Second)))
+		testcontainers.WithWaitStrategy(wait.ForLog("database system is ready to accept connections").WithOccurrence(2).WithStartupTimeout(240*time.Second)))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -76,6 +76,7 @@ type fakeNetBird struct {
 	routes    []map[string]any
 	checks    []map[string]any
 	policies  []map[string]any
+	peerHosts []string // gateway hostnames that have joined; default: the c01 pair
 	calls     []string
 }
 
@@ -126,10 +127,15 @@ func (f *fakeNetBird) serve(w http.ResponseWriter, r *http.Request) {
 		f.keys++
 		reply(map[string]any{"id": "k1", "key": "SETUPKEY-1", "name": "malgary-gateways", "type": "reusable", "valid": true, "revoked": false, "auto_groups": []string{}, "state": "valid"})
 	case r.Method == "GET" && r.URL.Path == "/api/peers":
-		reply([]map[string]any{
-			{"id": "p-a", "hostname": "gw-nyc-1a.c01", "name": "gw-nyc-1a", "connected": true, "groups": []any{}},
-			{"id": "p-b", "hostname": "gw-nyc-1b.c01", "name": "gw-nyc-1b", "connected": true, "groups": []any{}},
-		})
+		hosts := f.peerHosts
+		if hosts == nil {
+			hosts = []string{"gw-nyc-1a.c01", "gw-nyc-1b.c01"}
+		}
+		var peers []map[string]any
+		for i, h := range hosts {
+			peers = append(peers, map[string]any{"id": fmt.Sprintf("p-%d", i), "hostname": h, "name": h, "connected": true, "groups": []any{}})
+		}
+		reply(peers)
 	case r.Method == "GET" && r.URL.Path == "/api/routes":
 		reply(f.routes)
 	case r.Method == "POST" && r.URL.Path == "/api/routes":
@@ -149,10 +155,19 @@ func (f *fakeNetBird) serve(w http.ResponseWriter, r *http.Request) {
 		reply(pc)
 	case r.Method == "GET" && r.URL.Path == "/api/policies":
 		reply(f.policies)
-	case r.Method == "POST" && r.URL.Path == "/api/policies":
+	case (r.Method == "POST" && r.URL.Path == "/api/policies") || (r.Method == "PUT" && strings.HasPrefix(r.URL.Path, "/api/policies/")):
 		var p map[string]any
 		_ = json.NewDecoder(r.Body).Decode(&p)
 		p["id"] = fmt.Sprintf("pol%d", len(f.policies)+1)
+		replace := -1
+		if r.Method == "PUT" {
+			p["id"] = strings.TrimPrefix(r.URL.Path, "/api/policies/")
+			for i, old := range f.policies {
+				if old["id"] == p["id"] {
+					replace = i
+				}
+			}
+		}
 		// The real API answers with group objects, not IDs.
 		for _, rule := range p["rules"].([]any) {
 			rm := rule.(map[string]any)
@@ -164,7 +179,11 @@ func (f *fakeNetBird) serve(w http.ResponseWriter, r *http.Request) {
 				rm[k] = objs
 			}
 		}
-		f.policies = append(f.policies, p)
+		if replace >= 0 {
+			f.policies[replace] = p
+		} else {
+			f.policies = append(f.policies, p)
+		}
 		reply(p)
 	case r.Method == "GET" && r.URL.Path == "/api/accounts":
 		reply([]map[string]any{{"id": "acc1", "domain": "netbird.selfhosted", "domain_category": "private", "created_at": time.Now(), "created_by": "owner",

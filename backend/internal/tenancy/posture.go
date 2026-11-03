@@ -132,5 +132,21 @@ func (s *Service) applyAccess(ctx context.Context, t db.Tenant) error {
 	if err != nil {
 		return err
 	}
-	return policy.ApplyAccess(ctx, c, rules, groupGateways, groupAllUsers)
+	enabled, err := s.accessAllowed(ctx, t.ID, stack.DesiredHash)
+	if err != nil {
+		return err
+	}
+	return policy.ApplyAccess(ctx, c, rules, groupGateways, groupAllUsers, enabled)
+}
+
+// accessAllowed is the interim isolation gate (feature 002, FR-009): when IsolationRequired is
+// set, users reach the gateway only once an isolation test passed for the stack's current hash.
+func (s *Service) accessAllowed(ctx context.Context, tenantID uuid.UUID, hash *string) (bool, error) {
+	if !s.IsolationRequired {
+		return true, nil
+	}
+	if hash == nil {
+		return false, nil
+	}
+	return s.Store.IsolationPassedForHash(ctx, db.IsolationPassedForHashParams{TenantID: tenantID, StackHash: *hash})
 }

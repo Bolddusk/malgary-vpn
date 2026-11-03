@@ -913,9 +913,11 @@ components:
 
     IsolationTestInput:
       type: object
-      required: [stackHash, passed, results]
+      required: [passed, results]
       properties:
-        stackHash: {type: string, minLength: 8}
+        stackHash:
+          type: string
+          description: Set by the server to the stack's current hash when the result is recorded.
         passed: {type: boolean}
         egressIp: {type: string}
         results:
