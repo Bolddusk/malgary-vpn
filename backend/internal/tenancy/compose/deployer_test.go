@@ -98,11 +98,18 @@ func TestUpRetriesHealth(t *testing.T) {
 		}
 		return nil
 	}
-	if err := d.up(context.Background(), t.TempDir(), "nb-testco", "testco"); err != nil {
+	if err := d.up(context.Background(), t.TempDir(), "nb-testco", "testco", false); err != nil {
 		t.Fatal(err)
 	}
 	if len(r.calls) != 1 || r.calls[0] != "nb-testco up -d --remove-orphans" {
 		t.Fatalf("calls: %v", r.calls)
+	}
+	r.calls = nil
+	if err := d.up(context.Background(), t.TempDir(), "nb-testco", "testco", true); err != nil {
+		t.Fatal(err)
+	}
+	if len(r.calls) != 2 || r.calls[1] != "nb-testco up -d --no-deps --force-recreate netbird-server" {
+		t.Fatalf("a changed config.yaml must recreate the server: %v", r.calls)
 	}
 }
 

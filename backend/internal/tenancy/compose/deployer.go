@@ -87,12 +87,15 @@ func (d *Deployer) Deploy(ctx context.Context, spec tenancy.StackSpec, _ []byte)
 	if unchanged(dir, files) {
 		return nil
 	}
+	// The server reads config.yaml through a bind mount, which compose doesn't track: restart
+	// it when the file changes (env files are part of compose's own change detection).
+	configChanged := !sameFile(filepath.Join(dir, "config.yaml"), files["config.yaml"].Body)
 	hadPrev, err := writeFiles(dir, files)
 	if err != nil {
 		return err
 	}
 	project := "nb-" + spec.Tenant
-	if err := d.up(ctx, dir, project, spec.Tenant); err != nil {
+	if err := d.up(ctx, dir, project, spec.Tenant, configChanged && hadPrev); err != nil {
 		if !hadPrev {
 			return err
 		}
@@ -100,7 +103,7 @@ func (d *Deployer) Deploy(ctx context.Context, spec tenancy.StackSpec, _ []byte)
 		if rerr := restorePrev(dir, files); rerr != nil {
 			return errors.Join(err, fmt.Errorf("restore previous files: %w", rerr))
 		}
-		if rerr := d.up(ctx, dir, project, spec.Tenant); rerr != nil {
+		if rerr := d.up(ctx, dir, project, spec.Tenant, configChanged); rerr != nil {
 			return errors.Join(err, fmt.Errorf("previous version also failed: %w", rerr))
 		}
 		return fmt.Errorf("stack %s rolled back to the previous version: %w", spec.Tenant, err)
@@ -128,9 +131,14 @@ func (d *Deployer) Remove(ctx context.Context, slug, dbName string) error {
 	return os.RemoveAll(filepath.Join(d.Secrets.Dir, "tenants", slug))
 }
 
-func (d *Deployer) up(ctx context.Context, dir, project, slug string) error {
+func (d *Deployer) up(ctx context.Context, dir, project, slug string, restartServer bool) error {
 	if out, err := d.Runner.Compose(ctx, dir, project, "up", "-d", "--remove-orphans"); err != nil {
 		return fmt.Errorf("compose up %s: %w\n%s", slug, err, tail(out))
+	}
+	if restartServer {
+		if out, err := d.Runner.Compose(ctx, dir, project, "up", "-d", "--no-deps", "--force-recreate", "netbird-server"); err != nil {
+			return fmt.Errorf("restart netbird-server %s: %w\n%s", slug, err, tail(out))
+		}
 	}
 	timeout := d.HealthTimeout
 	if timeout == 0 {
@@ -229,6 +237,11 @@ func mode(f File) os.FileMode {
 		return 0o600
 	}
 	return 0o644
+}
+
+func sameFile(path string, body []byte) bool {
+	cur, err := os.ReadFile(path) //nolint:gosec // path built from a validated slug
+	return err == nil && bytes.Equal(cur, body)
 }
 
 // unchanged reports whether every rendered file already exists with the same content.
