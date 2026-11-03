@@ -62,6 +62,11 @@ func (s *Service) Apply(ctx context.Context, def gen.TenantDefinition) (gen.Tena
 		if err := s.applyDiff(ctx, existing, def); err != nil {
 			return gen.Tenant{}, false, err
 		}
+		// A tenant whose first provisioning failed is retried by applying it again: every
+		// step is idempotent. Active tenants are repaired by the reconcile loop instead.
+		if existing.Status == db.TenantStatusProvisioning {
+			go s.provision(context.WithoutCancel(ctx), existing.ID)
+		}
 		t, err := s.Get(ctx, existing.ID)
 		return t, false, err
 	case !store.IsNotFound(err):

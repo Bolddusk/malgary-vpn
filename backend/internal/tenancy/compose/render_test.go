@@ -37,6 +37,7 @@ type composeFile struct {
 		Restart     string            `json:"restart"`
 		MemLimit    string            `json:"mem_limit"`
 		NetworkMode string            `json:"network_mode"`
+		Hostname    string            `json:"hostname"`
 		Privileged  bool              `json:"privileged"`
 		Networks    any               `json:"networks"`
 		Ports       []string          `json:"ports"`
@@ -124,7 +125,7 @@ func TestRenderSafety(t *testing.T) {
 	if c.Networks["gateway"].Name != "malgary-gw" || !c.Networks["gateway"].External {
 		t.Errorf("gateway network: %+v", c.Networks["gateway"])
 	}
-	if strings.Join(rp.Ports, ",") != "51822:51822/udp" || rp.Environment["NB_WIREGUARD_PORT"] != "51822" || rp.Environment["NB_HOSTNAME"] != "gw.i01" {
+	if strings.Join(rp.Ports, ",") != "51822:51822/udp" || rp.Environment["NB_WIREGUARD_PORT"] != "51822" || rp.Environment["NB_HOSTNAME"] != "gw.i01" || rp.Hostname != "gw.i01" {
 		t.Errorf("routing peer port: %v %v", rp.Ports, rp.Environment)
 	}
 	if g := c.Services["guard"]; g.NetworkMode != "service:routing-peer" || g.Environment["GUARD_HOST_IP"] != "178.104.48.140" {

@@ -97,6 +97,8 @@ services:
   routing-peer:
     image: netbirdio/netbird:{{ $.Spec.NetbirdVersion }}
     restart: unless-stopped
+    # NetBird reports the OS hostname; the backend finds the gateway peer by it.
+    hostname: "{{ .Host }}"
     env_file: ./peer.env
     environment:
       NB_MANAGEMENT_URL: "https://{{ $.Spec.ManagementDomain }}:443"
