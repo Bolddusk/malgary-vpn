@@ -26,3 +26,8 @@ logs everything here. Full Ansible output for each run is kept in `infra/ansible
 | 2026-11-03 22:27 | Claude | Retry testco provisioning | `malgaryctl tenant apply -f deploy/tenants/interim/testco.yaml` | testco **active** at 22:27:53 |
 | 2026-11-03 22:28 | Claude | Isolation test (FR-009) | `malgaryctl isolation-test testco` | **PASS** for stack sha256:296ac65a…: 8 private targets blocked (host bridges 10.0.0.1/10.0.1.1/10.250.0.1, shared PostgreSQL 10.0.1.45:5432 and 178.104.48.140:5432, metadata, 10/8, 192.168/16), public reachable, egress 178.104.48.140 |
 | 2026-11-03 22:29 | Claude | Confirm the guard did the blocking (read-only) | `docker exec nb-testco-guard-1 nft list table inet malgary_guard`; guard metrics | 32 packets dropped by the forward rule; kernel WireGuard = 1; reapplied = 0 |
+| 2026-11-03 22:3x | Claude | Deploy: hide NetBird's own email login, fix setup-page install link | `ansible-playbook interim-site.yml …` (commit c221007) | ok, failed=0 |
+| 2026-11-03 22:44 | Claude | Apply testco's new spec | `POST /v1/tenants/01a1a37f…/stack:reconcile` | 202; config.yaml updated, server not restarted (bind mount) |
+| 2026-11-03 22:47 | Claude | Deploy: deployer recreates netbird-server on config change | `ansible-playbook interim-site.yml …` (commit a5265a7) | ok, failed=0 |
+| 2026-11-03 22:48 | Claude | One-time restart of testco's NetBird server | `ssh root@178… "cd /opt/malgary/stacks/testco && docker compose -p nb-testco up -d --no-deps --force-recreate netbird-server"` | "local authentication disabled - only external identity providers can be used" |
+| 2026-11-03 22:49 | Claude | Isolation test for the new stack hash | `malgaryctl isolation-test testco` | **PASS** for sha256:bd4530e4…; same 8 blocked, public ok |
