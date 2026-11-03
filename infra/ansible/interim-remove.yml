@@ -60,6 +60,10 @@
       args: {executable: /bin/bash}
       changed_when: true
 
+    - name: Stop loading wireguard at boot (the module stays loaded until the next reboot)
+      when: acting
+      ansible.builtin.file: {path: /etc/modules-load.d/wireguard.conf, state: absent}
+
     - name: Remove the provisioner login (needs the superuser; printed for the owner to run)
       ansible.builtin.debug:
         msg: "Last step, in Coolify's PostgreSQL terminal as the superuser: DROP ROLE malgary_provisioner;"

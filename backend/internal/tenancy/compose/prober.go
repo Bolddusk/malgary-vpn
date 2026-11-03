@@ -38,16 +38,20 @@ type Prober struct {
 // database (all of which answer if packets get through), plus cloud metadata and private ranges.
 func (p Prober) Targets(ctx context.Context) []string {
 	t := []string{
-		"10.250.0.1:22",        // the gateway network's bridge, i.e. the host
-		"172.17.0.1:22",        // docker0, i.e. the host
-		"169.254.169.254:80",   // Hetzner metadata service
-		"192.168.0.1:80",       // a typical private address
-		"10.0.0.1:80",          // ditto
-		p.HostIP + ":5432",     // database port on the host's public IP
+		"10.250.0.1:22",      // the gateway network's bridge, i.e. the host
+		"169.254.169.254:80", // Hetzner metadata service
+		"192.168.0.1:80",     // a typical private address
+		"10.0.0.1:80",        // ditto
+		p.HostIP + ":5432",   // database port on the host's public IP
 	}
-	if p.Network != "" {
-		if gw := dockerInspect(ctx, "network", p.Network, "{{(index .IPAM.Config 0).Gateway}}"); gw != "" {
-			t = append(t, gw+":22") // the Traefik network's bridge, i.e. the host
+	// The default bridge (docker0) and the Traefik network's bridge are both the host. Their
+	// addresses come from the daemon's pools (10.0.x.1 on the interim host), so look them up.
+	for _, n := range []string{"bridge", p.Network} {
+		if n == "" {
+			continue
+		}
+		if gw := dockerInspect(ctx, "network", n, "{{(index .IPAM.Config 0).Gateway}}"); gw != "" {
+			t = append(t, gw+":22")
 		}
 	}
 	if p.DBHost != "" {

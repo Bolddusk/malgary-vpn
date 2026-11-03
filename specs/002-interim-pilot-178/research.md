@@ -84,8 +84,20 @@ It re-applies every 30 seconds and exports per-peer WireGuard byte counters (001
 - **Bonus**: one container per tenant, each with its own network namespace, removes 001's open
   question P-2 (several NetBird clients in one namespace).
 
-**Kernel**: WireGuard is built into 178's kernel 6.8 (`wireguard.ko` present), usable from a
-container namespace with `NET_ADMIN`.
+**Kernel**: WireGuard ships with 178's kernel 6.8 (`wireguard.ko` present) but is **not
+loaded** (check 2026-11-04). The install loads it and lists it in
+`/etc/modules-load.d/wireguard.conf`: the one host change outside Docker. Without it NetBird
+falls back to userspace WireGuard, whose routed traffic never passes the forward hook the guard
+uses; the isolation test would then fail, so users stay blocked rather than exposed.
+
+**Facts confirmed 2026-11-04** (owner ran the read-only check): Docker 27.0.3, host Compose
+v5.1.0; Coolify proxy Traefik v3.6 with entrypoints `http`/`https` and resolver `letsencrypt`;
+Docker networks come from the daemon pool 10.0.x.0/24 (docker0 is 10.0.0.0/24, `coolify`
+10.0.1.0/24), so `malgary-gw` 10.250.0.0/24 and the probe's 192.0.2.0/28 overlap nothing;
+PostgreSQL 18.3 (`postgres:18-alpine`) at 10.0.1.11 on `coolify`; the provisioner is not a
+superuser, has CREATEDB and CREATEROLE, citext is available; no `malgary*`/`nb_*` names
+exist besides the provisioner; UDP 3478–3480 and 51821–51830 are free; 12 GB memory available
+with 13.6 GB swap in use.
 
 ## I5. Ports on 178
 

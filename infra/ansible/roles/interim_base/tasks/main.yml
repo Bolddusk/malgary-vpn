@@ -54,6 +54,15 @@
     mode: u=rwX,go=
     recurse: true
 
+# The only host change besides Docker objects: kernel WireGuard must be loaded, because in
+# userspace mode NetBird routes past the guard's forward rules (research I4). Loading the
+# module affects nothing else on the host. Removed again by interim-remove.yml.
+- name: WireGuard kernel module loaded now and at boot
+  when: interim_load_wireguard
+  block:
+    - name: Load wireguard
+      community.general.modprobe: {name: wireguard, state: present, persistent: present}
+
 - name: Gateway network (isolated bridge, no inter-container traffic, research I4)
   ansible.builtin.shell: |
     if docker network inspect {{ interim_gw_network }} >/dev/null 2>&1; then echo exists; exit 0; fi

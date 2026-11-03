@@ -18,6 +18,9 @@ coolify_certresolver: letsencrypt
 # Shared PostgreSQL 18 (fact): the Coolify resource's container name on the coolify network.
 interim_pg_container: buxe1z5wikkaftx5meckmr4w
 
+# Load the wireguard kernel module (present on 178 but not loaded, interim-check 2026-11-04).
+interim_load_wireguard: true
+
 # Gateway network (research I4).
 interim_gw_network: malgary-gw
 interim_gw_subnet: 10.250.0.0/24

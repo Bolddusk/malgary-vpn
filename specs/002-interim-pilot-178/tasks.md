@@ -190,7 +190,7 @@ and a test user connects from the setup page.
 - [X] T032 [US1] Playbook `infra/ansible/interim-site.yml` running `interim_base`,
   `interim_zitadel`, `interim_backend` and, only when Grafana credentials are set,
   `interim_alloy` (T046). Writes a firewall snapshot before and after (T037).
-- [ ] T033 🖥 [US1] Run `interim-check.yml` on 178 and update [research.md](research.md) with any
+- [X] T033 🖥 [US1] Run `interim-check.yml` on 178 and update [research.md](research.md) with any
   fact that differs (owner go-ahead).
 - [ ] T034 🖥 [US1] Run `interim-site.yml`, apply the plans and the `testco` tenant, and walk
   quickstart V1, V2 and V9a with one test user (owner go-ahead; needs the Google OAuth
