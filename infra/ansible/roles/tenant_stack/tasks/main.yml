@@ -33,6 +33,7 @@
     name: "{{ spec.database.user }}"
     password: "{{ db_password }}"
     role_attr_flags: NOSUPERUSER,NOCREATEDB,NOCREATEROLE
+  become: true
   become_user: postgres
   no_log: true
 
@@ -41,6 +42,7 @@
     name: "{{ spec.database.name }}"
     owner: "{{ spec.database.user }}"
     encoding: UTF8
+  become: true
   become_user: postgres
 
 - name: Rendered files (config, compose, Traefik route)
@@ -57,7 +59,7 @@
   no_log: true
   register: rendered
 
-- name: Keep the previous compose file for rollback
+- name: Keep the previous compose file for rollback  # noqa: no-handler (must run before the update, not after)
   ansible.builtin.copy:
     src: "{{ stack_dir }}/compose.yaml"
     dest: "{{ stack_dir }}/compose.yaml.prev"

@@ -30,7 +30,7 @@
         spaces:{{ backup_bucket }}/{{ restore_date }}/{{ inventory_hostname }} {{ restore_dir }}/set
       changed_when: true
 
-    - name: Stop writers
+    - name: Stop writers  # noqa: command-instead-of-module (best-effort stop of many projects in one shell)
       ansible.builtin.shell: |
         systemctl stop malgaryd || true
         for d in /opt/malgary/stacks/*/; do docker compose -p "nb-$(basename "$d")" --project-directory "$d" stop || true; done

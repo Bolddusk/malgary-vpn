@@ -21,8 +21,7 @@ jobs:
         working-directory: infra/ansible
         run: |
           pipx install ansible-lint
-          pipx inject ansible-lint ansible-core
-          pipx runpip ansible-lint install ansible
+          pipx inject ansible-lint ansible   # full Ansible, so the collections we use resolve
           ansible-lint
 
   backend:

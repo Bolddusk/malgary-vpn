@@ -6,4 +6,6 @@ base_vpc_cidr: "10.10.0.0/16"
 postgres_vpc_cidr: "{{ base_vpc_cidr }}"
 traefik_dir: /opt/malgary/traefik
 # Egress IP per gateway pair, from the generated cell inventory (deploy/cells/<cell>.yaml).
-egress_ips: "{{ (lookup('ansible.builtin.file', playbook_dir ~ '/../../deploy/cells/' ~ malgary_cell ~ '.yaml', errors='ignore') | default('{}', true) | from_yaml).gatewayPairs | default([]) | items2dict(key_name='name', value_name='egressIp') }}"
+cell_inventory_file: "{{ playbook_dir ~ '/../../deploy/cells/' ~ malgary_cell ~ '.yaml' }}"
+cell_inventory: "{{ lookup('ansible.builtin.file', cell_inventory_file, errors='ignore') | default('{}', true) | from_yaml }}"
+egress_ips: "{{ cell_inventory.gatewayPairs | default([]) | items2dict(key_name='name', value_name='egressIp') }}"

@@ -14,16 +14,16 @@ vrrp_script gw_health {
   rise 3
 }
 
-vrrp_instance {{ pair_name | replace('-', '_') }} {
+vrrp_instance {{ gateway_pair_name | replace('-', '_') }} {
   state BACKUP
   nopreempt
   interface eth1
-  virtual_router_id {{ 50 + (pair_name | regex_replace('^.*-', '') | int) }}
-  priority {{ 150 if is_primary else 100 }}
+  virtual_router_id {{ 50 + (gateway_pair_name | regex_replace('^.*-', '') | int) }}
+  priority {{ 150 if gateway_is_primary else 100 }}
   advert_int 1
   unicast_src_ip {{ private_ipv4 }}
   unicast_peer {
-    {{ pair_peer_ip }}
+    {{ gateway_pair_peer_ip }}
   }
   authentication {
     auth_type PASS

@@ -24,10 +24,10 @@
   hosts: localhost
   connection: local
   become: true
-  roles: [tenant-stack]
+  roles: [tenant_stack]
 
 - name: Tenant routing peers on gateways
   hosts: spec_gateways
   become: true
   remote_user: malgary-deployer
-  roles: [routing-peer]
+  roles: [routing_peer]

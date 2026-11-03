@@ -1,0 +1,8 @@
+# ansible-lint settings for Malgary VPN.
+profile: production
+skip_list:
+  # The tenant_stack and routing_peer roles use short role-local fact names (slug, stack_dir,
+  # stun_port) that mirror the StackSpec contract; prefixing every one hurts readability.
+  - var-naming[no-role-prefix]
+exclude_paths:
+  - group_vars/all/secrets.example.yml

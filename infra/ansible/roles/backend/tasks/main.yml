@@ -125,7 +125,9 @@
         echo "malgary_release_pending_days{component=\"$1\",latest=\"$tag\",deployed=\"$3\"} $days" >> "$out.tmp"
       }
       check netbird netbirdio/netbird "$(grep -h '^MALGARY_NETBIRD_VERSION=' /etc/malgary/malgaryd.env | cut -d= -f2 || echo unknown)"
-      check zitadel zitadel/zitadel "$(docker inspect --format '{{ "{{" }}.Config.Image{{ "}}" }}' $(docker ps -q --filter name=zitadel-zitadel) 2>/dev/null | sed 's/.*:v//')"
+      zid=$(docker ps -q --filter name=zitadel-zitadel)
+      zver=$(docker inspect --format '{{ "{{" }}.Config.Image{{ "}}" }}' $zid 2>/dev/null | sed 's/.*:v//')
+      check zitadel zitadel/zitadel "$zver"
       mv "$out.tmp" "$out"
 
 - name: Release watch timer

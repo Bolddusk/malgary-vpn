@@ -4,7 +4,7 @@
   ansible.builtin.uri:
     url: http://169.254.169.254/metadata/v1/interfaces/public/0/anchor_ipv4/gateway
     return_content: true
-  register: anchor_gw
+  register: gateway_anchor_gw
   changed_when: false
 
 - name: Stop cloud-init from rewriting the network config
@@ -19,7 +19,7 @@
     dest: /etc/netplan/60-anchor-route.yaml
     mode: "0600"
   vars:
-    anchor_gateway: "{{ anchor_gw.content | trim }}"
+    anchor_gateway: "{{ gateway_anchor_gw.content | trim }}"
   notify: Apply netplan
 
 - name: IP forwarding
@@ -29,7 +29,7 @@
     sysctl_file: /etc/sysctl.d/60-malgary-gateway.conf
   loop: [net.ipv4.ip_forward, net.ipv6.conf.all.forwarding]
 
-- name: nftables include directory
+- name: Nftables include directory
   ansible.builtin.file: {path: /etc/nftables.d, state: directory, mode: "0750"}
 
 - name: NAT for tenant WireGuard interfaces and MSS clamping
@@ -45,10 +45,10 @@
 
 - name: Pair facts (peer address and this droplet's ID)
   ansible.builtin.set_fact:
-    pair_name: "{{ (group_names | select('match', '^pair_') | first)[5:] | replace('_', '-') }}"
-    pair_peer_ip: "{{ hostvars[(groups[group_names | select('match', '^pair_') | first] | difference([inventory_hostname]) | first)].private_ipv4 }}"
-    droplet_id: "{{ do_id }}"
-    is_primary: "{{ inventory_hostname is match('.*a\\.c[0-9]{2}$') }}"
+    gateway_pair_name: "{{ (group_names | select('match', '^pair_') | first)[5:] | replace('_', '-') }}"
+    gateway_pair_peer_ip: "{{ hostvars[(groups[group_names | select('match', '^pair_') | first] | difference([inventory_hostname]) | first)].private_ipv4 }}"
+    gateway_droplet_id: "{{ do_id }}"
+    gateway_is_primary: "{{ inventory_hostname is match('.*a\\.c[0-9]{2}$') }}"
 
 - name: DO token for moving the reserved IP (scoped to reserved IPs)
   ansible.builtin.copy:
@@ -79,7 +79,7 @@
       table inet malgary_vrrp {
         chain input {
           type filter hook input priority -10; policy accept;
-          ip protocol vrrp ip saddr != {{ pair_peer_ip }} drop
+          ip protocol vrrp ip saddr != {{ gateway_pair_peer_ip }} drop
         }
       }
     mode: "0600"

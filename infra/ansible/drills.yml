@@ -22,8 +22,12 @@
                       ssh gw-nyc-1a.c90.vpn-staging.malgary.com sudo systemctl start keepalived && ok=1 ;;
           esac
           mkdir -p /var/lib/alloy/textfile
-          printf 'malgary_drill_last_run_timestamp_seconds{kind="%s"} %s\nmalgary_drill_last_success{kind="%s"} %s\nmalgary_drill_duration_seconds{kind="%s"} %s\n' \
-            "$kind" "$(date +%s)" "$kind" "$ok" "$kind" "$(( $(date +%s) - start ))" > "/var/lib/alloy/textfile/drill-$kind.prom"
+          out="/var/lib/alloy/textfile/drill-$kind.prom"
+          {
+            echo "malgary_drill_last_run_timestamp_seconds{kind=\"$kind\"} $(date +%s)"
+            echo "malgary_drill_last_success{kind=\"$kind\"} $ok"
+            echo "malgary_drill_duration_seconds{kind=\"$kind\"} $(( $(date +%s) - start ))"
+          } > "$out"
           logger -t malgary-drill "$kind drill ok=$ok"
 
     - name: Drill units

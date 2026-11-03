@@ -86,7 +86,7 @@
     - {db: malgary, owner: malgary_owner}
     - {db: zitadel, owner: zitadel}
 
-- name: citext extension for the backend
+- name: Citext extension for the backend
   community.postgresql.postgresql_ext:
     name: citext
     db: malgary
