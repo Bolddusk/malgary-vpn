@@ -201,3 +201,21 @@ func keys[V any](m map[string]V) []string {
 	}
 	return out
 }
+
+func TestRenderLocalAuth(t *testing.T) {
+	files, _ := render(t, testSpec(true), testHost)
+	if strings.Contains(string(files["config.yaml"].Body), "localAuthDisabled") {
+		t.Error("local auth must stay on until Malgary sign-in is registered")
+	}
+	s := testSpec(true)
+	s.LocalAuthDisabled = true
+	sealed, _, _ := s.Seal()
+	files, _ = render(t, sealed, testHost)
+	if !strings.Contains(string(files["config.yaml"].Body), "localAuthDisabled: true") {
+		t.Error("localAuthDisabled not rendered")
+	}
+	if !strings.Contains(string(files["setup/index.html"].Body), "docs.netbird.io/get-started/install") {
+		t.Error("setup page download link")
+	}
+}
+

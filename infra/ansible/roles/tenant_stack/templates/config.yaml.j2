@@ -15,6 +15,9 @@ server:
   auth:
     issuer: "https://{{ spec.managementDomain }}/oauth2"
     signKeyRefreshEnabled: true
+{% if spec.localAuthDisabled | default(false) %}
+    localAuthDisabled: true
+{% endif %}
     sessionCookieEncryptionKey: "{{ session_cookie_key }}"
     dashboardRedirectURIs:
       - "https://{{ spec.managementDomain }}/nb-auth"

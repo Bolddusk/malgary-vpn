@@ -19,11 +19,17 @@ without a constitution-reviewed migration (Principle IX).
     { "host": "gw-nyc-1a.c01", "wgInterface": "wt-onedge-3f2", "wgPort": 51821, "metric": 100, "setupKeyRef": "secret://tenants/onedge/gw" },
     { "host": "gw-nyc-1b.c01", "wgInterface": "wt-onedge-3f2", "wgPort": 51821, "metric": 200, "setupKeyRef": "secret://tenants/onedge/gw" }
   ],
+  "localAuthDisabled": true,
   "hash": "sha256:…"
 }
 ```
 
 Notes (amended during implementation, 2026-11-03):
+
+- `localAuthDisabled` (added 2026-11-04, feature 002 testing): hides NetBird's own
+  email/password login so Malgary sign-in is the only way in. Omitted (false) in the first
+  deploy pass, because the server won't start without another identity provider; set in the
+  second pass once bootstrap has registered Malgary sign-in.
 
 - `httpPort` (20000–29999) is the stack's local port behind Traefik. Its STUN port is derived as
   `3478 + (httpPort − 20000)` and its operator dashboard port as `httpPort + 10000`.

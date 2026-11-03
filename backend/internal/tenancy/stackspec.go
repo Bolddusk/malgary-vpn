@@ -20,7 +20,12 @@ type StackSpec struct {
 	Database         SpecDatabase  `json:"database"`
 	Relay            SpecRelay     `json:"relay"`
 	RoutingPeers     []RoutingPeer `json:"routingPeers"`
-	Hash             string        `json:"hash,omitempty"`
+	// LocalAuthDisabled hides NetBird's own email/password login, so Malgary sign-in is the
+	// only way in (Principle VII). Set only after bootstrap registered Malgary sign-in: the
+	// server refuses to start without another identity provider. Omitted when false, so
+	// earlier hashes are unchanged.
+	LocalAuthDisabled bool   `json:"localAuthDisabled,omitempty"`
+	Hash              string `json:"hash,omitempty"`
 }
 
 // SpecDatabase points the stack at its own database.

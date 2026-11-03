@@ -15,6 +15,10 @@ server:
   auth:
     issuer: "https://{{ .Spec.ManagementDomain }}/oauth2"
     signKeyRefreshEnabled: true
+{{- if .Spec.LocalAuthDisabled }}
+    # Malgary sign-in is the only login (registered during bootstrap).
+    localAuthDisabled: true
+{{- end }}
     sessionCookieEncryptionKey: "{{ .Secrets.SessionKey }}"
     dashboardRedirectURIs:
       - "https://{{ .Spec.ManagementDomain }}/nb-auth"

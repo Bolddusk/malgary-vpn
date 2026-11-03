@@ -369,6 +369,10 @@ func (s *Service) render(ctx context.Context, t db.Tenant, stack db.TenantStack,
 		Relay:            SpecRelay{Mode: "embedded"},
 	}
 	if withPeers {
+		// Pass 2 runs after bootstrap, which registered Malgary sign-in in the stack.
+		if link, err := s.Store.GetIdentityLink(ctx, t.ID); err == nil && link.ZitadelAppClientID != nil && *link.ZitadelAppClientID != "" {
+			spec.LocalAuthDisabled = true
+		}
 		peers, err := s.Store.ListRoutingPeersByTenant(ctx, t.ID)
 		if err != nil {
 			return StackSpec{}, err
