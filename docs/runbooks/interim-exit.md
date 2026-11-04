@@ -52,4 +52,6 @@ ansible-playbook -i inventory/interim.yml interim-remove.yml -e confirm=yes
 ```
 
 Then, in Coolify's PostgreSQL terminal as the superuser: `DROP ROLE malgary_provisioner;`.
+Remove the operator Mac's root key (comment `malgary-178`) from `/root/.ssh/authorized_keys`,
+leaving the original key and Coolify's key in place.
 Check the other apps' health in Coolify, and record the move in `pilot-results.md`.
